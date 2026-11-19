@@ -2,12 +2,15 @@
 // locally without a build step: `node serve.ts` serves app/ on http://localhost:8080.
 // It sends the MIME types an offline web app needs, refuses any path outside app/, and otherwise
 // does nothing clever: this is a development convenience, not a web server for the internet.
-import { createReadStream, statSync } from 'node:fs';
+// On startup it also prints the four screenshot scenes from shots.json, so a visual
+// check is one copy-paste away.
+import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('./app', import.meta.url)));
+const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const args = process.argv.slice(2);
 const portIndex = args.indexOf('--port');
 const requested = portIndex === -1 ? 8080 : Number(args[portIndex + 1]);
@@ -70,4 +73,12 @@ createServer((request, response) => {
   createReadStream(file).pipe(response);
 }).listen(port, '127.0.0.1', () => {
   console.log(`app/ is on http://localhost:${port}`);
+  try {
+    const shots = JSON.parse(readFileSync(join(here, 'shots.json'), 'utf-8'));
+    for (const shot of shots) {
+      console.log(`shot ${shot.name}: http://localhost:${port}/${shot.query}`);
+    }
+  } catch {
+    // No shots.json beside serve.ts: the server still works.
+  }
 });

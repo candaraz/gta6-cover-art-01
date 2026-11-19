@@ -5,6 +5,7 @@ import {
   SCENES, LAYOUTS, GRADES, EXPORT_SIZES,
   defaultState, defaultPanels, layoutPanels, layoutPanelCount,
   renderCover, exportCoverPNG, loadCoverFonts, resolvePanelImage, panelAt, coverFit,
+  dedupePanelSources,
 } from './cover.js';
 import { runShot } from './shots.js';
 
@@ -90,6 +91,9 @@ function buildControls() {
         state.panels[heroIdx] = state.panels[curHero];
         state.panels[curHero] = swap;
       }
+      // Switching layouts can repeat a scene by index (a dense grid reuses the
+      // old panels' sources); swap repeats for unused scenes so no photo doubles.
+      dedupePanelSources(state.panels);
       layoutBox.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
       selectedPanel = 0;
       redraw();
@@ -113,6 +117,7 @@ function buildControls() {
   });
 
   const sizeBox = $('sizeButtons');
+  sizeBox.classList.add('wide');
   EXPORT_SIZES.forEach((size) => {
     const b = document.createElement('button');
     b.type = 'button';

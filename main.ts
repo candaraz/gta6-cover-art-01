@@ -1,9 +1,11 @@
 // Vice Cover Studio, a gta6-cover-art-01 entry (Node 22, standard library only).
-// The app is this directory's app/ folder: plain static files a desktop browser loads
-// offline (app/index.html and its ES modules, OFL fonts and model-made scene photos,
-// no library and no network request). This program hands the entry in: it copies app/
-// and screenshots/ from beside this file to /output and writes /output/dossier.json,
-// the summary the judge reads, with the vendored make.fun library.
+// v2: seven layouts (Nine Grid + Title Band are new), nine original scene photos, a
+// 3D title, a bigger script and two-line captions. The app is this directory's app/
+// folder: plain static files a desktop browser loads offline (app/index.html and its
+// ES modules, OFL fonts and model-made scene photos, no library and no network
+// request). This program hands the entry in: it copies app/ and screenshots/ from
+// beside this file to /output and writes /output/dossier.json, the summary the judge
+// reads, with the vendored make.fun library.
 //
 // Serve the app locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

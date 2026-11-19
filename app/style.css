@@ -228,13 +228,15 @@ button:disabled { opacity: 0.5; cursor: default; }
   gap: 8px;
   margin-bottom: 6px;
 }
+.button-grid.wide { grid-template-columns: repeat(3, 1fr); }
+.button-grid.wide button { text-align: center; padding: 8px 4px; }
 .button-grid button { text-align: left; }
 .button-grid small { display: block; font-weight: 400; color: #e8c8f5; font-size: 13px; }
 
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .thumbs img {
-  width: 64px;
-  height: 48px;
+  width: 72px;
+  height: 54px;
   object-fit: cover;
   border: 2px solid #4a2568;
   border-radius: 4px;

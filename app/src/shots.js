@@ -5,7 +5,7 @@
 export async function runShot(shot, query, api) {
   const { state, sceneImages, uploads, canvas } = api;
   const photo = query.get('photo') || 'boulevard';
-  const layout = query.get('layout') || 'hero-strip';
+  const layout = query.get('layout') || 'nine-grid';
   const grade = query.get('grade') || 'sunset';
   const size = query.get('size') || '1920x1080';
   const title = query.get('title') || 'VICE ROYALE';
@@ -19,7 +19,7 @@ export async function runShot(shot, query, api) {
   if (query.get('quote')) state.quote = query.get('quote');
   if (query.get('band')) state.band = query.get('band');
   // A fresh panel set for the shot's layout, hero first.
-  const { defaultPanels, layoutPanels, SCENES } = await import('./cover.js');
+  const { defaultPanels, layoutPanels, SCENES, dedupePanelSources } = await import('./cover.js');
   state.panels = defaultPanels(layout);
 
   // The shot's hero photo: the named scene, loaded as the hero upload, and the hero
@@ -30,7 +30,8 @@ export async function runShot(shot, query, api) {
     const heroIdx = layoutPanels(layout, w, h).findIndex((p) => p.hero);
     const scene = SCENES.find((s) => s.id === photo);
     if (heroIdx >= 0 && scene) state.panels[heroIdx].caption = scene.caption;
-    // No panel repeats the hero photo while a spare scene is unused.
+    // No panel repeats the hero photo while a spare scene is unused: with nine
+    // scenes and nine panels, a repeated source always has an unused spare.
     state.panels.forEach((p, i) => {
       if (i !== heroIdx && p.source === photo) {
         const spare = SCENES.find((s) => s.id !== photo && !state.panels.some((q) => q.source === s.id));
@@ -41,6 +42,8 @@ export async function runShot(shot, query, api) {
       }
     });
   }
+  // One last pass: no two panels share a scene, so the dense grids never repeat.
+  dedupePanelSources(state.panels);
 
   if (shot === 'cover') {
     document.body.classList.add('shot-cover');
