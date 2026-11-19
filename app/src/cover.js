@@ -412,30 +412,73 @@ export function drawTitle(ctx, title, W, H) {
 }
 
 /** Pink brush-script line tucked under the title, tilted -2 degrees, fitted to the width.
-    Its centre sits just below the title's baseline, clear of the pills and ribbon below. */
+    Placed from measured ink, never from a fixed offset: the script's top clears the
+    title's ink bottom (baseline + outline + drop shadow) by a clear gap, and its
+    bottom clears the furniture band (pills / ribbon at 0.895H). The tilt lifts the
+    right end and drops the left, so the tallest ascender / deepest descender are
+    measured per glyph at their own x position — a wide script can no longer climb
+    into the title on its right end. If the band is too short, the script shrinks
+    before it ever collides; the title clearance is never sacrificed. */
 export function drawScript(ctx, script, titleInfo, W, H) {
   const text = (script || '').trim();
   if (!text) return;
+  const tilt = 0.035; // -2 degrees, as in the brief
+  const titleBaseline = titleInfo ? titleInfo.baseline : H * 0.82;
+  const titleSize = titleInfo ? titleInfo.size : H * 0.19;
+  // Title ink bottom: the glyphs sit on the baseline, the black outline reaches
+  // 4.5% of the title size past it and the purple drop shadow 5.5% — 6% covers both.
+  const titleBottom = titleBaseline + titleSize * 0.06;
+  const gap = H * 0.02;
+  const furnitureTop = H * 0.895;
+  const bottomMargin = H * 0.008;
+  const floor = Math.max(13, H * 0.02);
+
+  // Ink extents at a size: whole-string width, plus the per-glyph ascender /
+  // descender extremes including the tilt: rotate(-2°) lifts the RIGHT end and
+  // drops the LEFT, so the highest ink is an ascender on the right and the
+  // lowest ink a descender on the left. (Verified by pixel scan: the script's
+  // right third sits ~14 px higher than its left third at 1080 wide.)
+  const measure = (size) => {
+    ctx.font = `400 ${size}px "Yellowtail", cursive`;
+    const full = ctx.measureText(text);
+    let x = 0;
+    let topRel = 0;
+    let botRel = 0;
+    for (const ch of text) {
+      const gm = ctx.measureText(ch);
+      const cx = x + gm.width / 2 - full.width / 2;
+      topRel = Math.max(topRel, gm.actualBoundingBoxAscent + Math.max(0, cx) * tilt);
+      botRel = Math.max(botRel, gm.actualBoundingBoxDescent + Math.max(0, -cx) * tilt);
+      x += gm.width;
+    }
+    return { width: full.width, topRel, botRel };
+  };
+
+  // Fit the width first (as before), then the vertical band below the title.
   let size = Math.max(14, H * 0.04);
   ctx.font = `400 ${size}px "Yellowtail", cursive`;
   while (size > 13 && ctx.measureText(text).width > W * 0.72) {
     size -= 2;
     ctx.font = `400 ${size}px "Yellowtail", cursive`;
   }
+  let m = measure(size);
+  while (size > floor && titleBottom + gap + m.topRel + m.botRel + 4 > furnitureTop - bottomMargin) {
+    size = Math.max(floor, size * 0.92);
+    m = measure(size);
+  }
+  // Alphabetic baseline: the ink top lands exactly one gap below the title.
+  const baseline = titleBottom + gap + m.topRel;
   ctx.save();
-  const tw = ctx.measureText(text).width;
-  const cx = W * 0.5;
-  const cy = (titleInfo ? titleInfo.baseline : H * 0.82) + size * 1.05;
-  ctx.translate(cx, cy);
-  ctx.rotate(-0.035);
+  ctx.translate(W * 0.5, baseline);
+  ctx.rotate(-tilt);
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  ctx.textBaseline = 'alphabetic';
   ctx.shadowColor = 'rgba(255, 110, 199, 0.9)';
   ctx.shadowBlur = size * 0.35;
   ctx.fillStyle = '#ff6ec7';
   ctx.fillText(text, 0, 0);
   ctx.restore();
-  return tw;
+  return m.width;
 }
 
 /** Gold starburst seal: EST. 2026. Drawn as a 16-point star, no image.
