@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vice Cover Studio — turn your photo into a Vice-style poster cover</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">★</span>
+    <div>
+      <h1>VICE COVER STUDIO</h1>
+      <p>Your photo, made into a Vice-style poster cover. Four steps, one PNG.</p>
+    </div>
+  </div>
+  <ol class="steps" aria-label="Steps">
+    <li><b>1</b> Photo</li>
+    <li><b>2</b> Layout</li>
+    <li><b>3</b> Words</li>
+    <li><b>4</b> Export</li>
+  </ol>
+</header>
+
+<main class="app">
+  <section class="preview-col">
+    <div class="preview-wrap">
+      <canvas id="cover" width="1920" height="1080" aria-label="Live cover preview"></canvas>
+      <div class="preview-hint" id="previewHint">Click a panel to select it · drag to reposition the photo · scroll to zoom</div>
+    </div>
+    <p class="selected-panel" id="selectedPanel">Panel: Hero — Boulevard</p>
+  </section>
+
+  <aside class="controls" aria-label="Cover controls">
+    <section class="card" id="card-photo">
+      <h2>1 · Photo</h2>
+      <label class="file-label">Add your photos
+        <input id="photo" type="file" accept="image/*" multiple>
+      </label>
+      <div class="photo-row">
+        <button id="useSample" type="button">Use sample photo</button>
+        <button id="clearPhotos" type="button">Clear uploads</button>
+      </div>
+      <div class="thumbs" id="thumbs" aria-label="Your photos"></div>
+      <p class="note">Photos stay on your machine — nothing is uploaded.</p>
+    </section>
+
+    <section class="card" id="card-layout">
+      <h2>2 · Layout</h2>
+      <div class="button-grid" id="layoutButtons" role="group" aria-label="Layout"></div>
+      <h2>Grade</h2>
+      <div class="button-grid" id="gradeButtons" role="group" aria-label="Colour grade"></div>
+    </section>
+
+    <section class="card" id="card-panel">
+      <h2>Selected panel</h2>
+      <label>Fill with
+        <select id="panelSource"></select>
+      </label>
+      <label>Caption
+        <input id="panelCaption" type="text" maxlength="60" value="">
+      </label>
+      <label>Zoom <span id="zoomValue">100%</span>
+        <input id="panelZoom" type="range" min="100" max="250" value="100">
+      </label>
+      <button id="resetCrop" type="button">Reset crop</button>
+    </section>
+
+    <section class="card" id="card-words">
+      <h2>3 · Words</h2>
+      <label>Title
+        <input id="title" type="text" maxlength="24" value="VICE ROYALE">
+      </label>
+      <label>Script line
+        <input id="script" type="text" maxlength="40" value="chasing the last light">
+      </label>
+      <label>Press quote
+        <input id="quote" type="text" maxlength="70" value="THE COAST HAS NEVER LOOKED THIS GUILTY.">
+      </label>
+      <label>Quoted by
+        <input id="quotePaper" type="text" maxlength="30" value="THE VICE LEDGER">
+      </label>
+      <label>Bottom band
+        <input id="band" type="text" maxlength="50" value="EVERY SUNSET HAS A PRICE">
+      </label>
+    </section>
+
+    <section class="card" id="card-furniture">
+      <h2>Poster furniture</h2>
+      <div class="checks" id="furnitureChecks"></div>
+      <div class="photo-row">
+        <button id="furnitureAll" type="button">All on</button>
+        <button id="furnitureNone" type="button">All off</button>
+      </div>
+    </section>
+
+    <section class="card" id="card-export">
+      <h2>4 · Export</h2>
+      <div class="button-grid" id="sizeButtons" role="group" aria-label="Export size"></div>
+      <button id="export" type="button" class="export-btn">Export PNG</button>
+      <p id="status" role="status"></p>
+    </section>
+
+    <p class="fineprint">Original art — no Rockstar logo, artwork or font. Title font Passion One,
+      script Yellowtail, labels Barlow Condensed, all SIL Open Font License (see fonts/).
+      Scenes are model-made originals; your photos never leave this machine.</p>
+  </aside>
+</main>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
