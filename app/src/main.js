@@ -20,6 +20,9 @@ let state = defaultState('nine', 'sunset');
 let size = SIZES[0];
 let selected = 0;
 let dragging = null;
+// True while rendering a screenshot (?shot=…): the selection outline is
+// an editor-only aid and must never be baked into a shot or an export.
+let inShot = false;
 
 const $ = (id) => document.getElementById(id);
 const preview = $('preview');
@@ -56,7 +59,7 @@ function render() {
   }
   pctx.clearRect(0, 0, w, h);
   drawCover(pctx, state, images, w, h);
-  highlightSelected();
+  if (!inShot) highlightSelected();
 }
 
 // Outlines the selected panel on the preview so the user sees which one
@@ -326,6 +329,7 @@ async function init() {
   syncPanelBox();
   await loadAll();
   const query = new URLSearchParams(location.search);
+  inShot = query.has('shot');
   if (query.has('shot')) {
     const layoutId = query.get('layout');
     if (layoutId && LAYOUTS[layoutId]) {
