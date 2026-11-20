@@ -1,7 +1,9 @@
 // A tiny static server for app/ (Node 22, standard library only), so the
-// entry can be tried locally with no build step: `node serve.ts` serves
-// app/ on http://localhost:8080. It sends the MIME types an offline web app
-// needs, refuses any path outside app/, and does nothing else: a development
+// entry can be tried locally without a build step:
+// `node serve.ts` serves app/ on http://localhost:8080, and
+// `node serve.ts --port 8081` picks another port.
+// It sends the MIME types an offline web app needs, refuses any path
+// outside app/, and otherwise does nothing clever: this is a development
 // convenience, not a web server for the internet.
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -49,27 +51,26 @@ createServer((request, response) => {
     return;
   }
   if (pathname.endsWith('/')) pathname += 'index.html';
-  const file = resolve(root, '.' + normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, ''));
-  if (!file.startsWith(root + sep) && file !== root) {
+  const file = resolve(join(root, normalize(pathname)));
+  if (file !== root && !file.startsWith(root + sep)) {
     response.writeHead(403).end('forbidden');
     return;
   }
-  let stat;
+  let size: number;
   try {
-    stat = statSync(file);
+    const stats = statSync(file);
+    if (!stats.isFile()) throw new Error('not a file');
+    size = stats.size;
   } catch {
     response.writeHead(404).end('not found');
     return;
   }
-  if (!stat.isFile()) {
-    response.writeHead(404).end('not found');
-    return;
-  }
   response.writeHead(200, {
-    'Content-Type': MIME[extname(file).toLowerCase()] || 'application/octet-stream',
-    'Content-Length': stat.size,
+    'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'content-length': size,
+    'cache-control': 'no-store',
   });
   createReadStream(file).pipe(response);
-}).listen(port, () => {
-  console.log(`Vice Cover Studio at http://localhost:${port}/`);
+}).listen(port, '127.0.0.1', () => {
+  console.log(`app/ is on http://localhost:${port}`);
 });
