@@ -1,11 +1,7 @@
-// main.ts — Vice Cover Studio v4, the program that hands the app in.
-// Node 22, standard library only. The app is plain static files under app/
-// (index.html and its ES modules, no library, no network request); this
-// program copies app/ and screenshots/ from beside this file to /output and
-// writes /output/dossier.json, the summary the judge reads, with the
-// vendored make.fun library. Serve it locally first with `node serve.ts`,
-// then open http://localhost:8080. Outside the grader's container,
-// MAKEFUN_OUTPUT_DIR stands in for /output:
+// Vice Cover Studio — handoff program (Node 22, standard library only).
+// Copies this repository's app/ and screenshots/ into the output directory
+// and writes the dossier the judge reads, using the vendored make.fun
+// library. Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -23,12 +19,10 @@ if (existsSync(join(here, 'screenshots'))) {
   cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 }
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the
-// bytes; the others refuse an entry the scorer would refuse (more than 4
-// screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB of
-// app files, in all, or a path under app/ over 1000 bytes: app/ counts beside
-// /output's own 1000-entry cap, its screenshots/ and dossier.json).
-// v4: the same caps, the same library — only the app it hands in changed.
+// The scorer's caps (reference/gate.json): text_max_bytes shapes the
+// dossier text; the rest refuse an entry the scorer would refuse — more
+// than 4 screenshots or one over 256 KiB, more than 993 files in app/ or
+// 48 MiB of app files, or a path under app/ over 1000 bytes.
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {

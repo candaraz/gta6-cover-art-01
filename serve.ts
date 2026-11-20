@@ -1,10 +1,8 @@
-// serve.ts — a tiny static server for app/ (Node 22, standard library only),
-// so the cover maker can be tried locally without a build step:
-//   node serve.ts            serves app/ on http://localhost:8080
-//   node serve.ts --port 9000
-// It sends the MIME types an offline web app needs, refuses any path outside
-// app/, and otherwise does nothing clever: a development convenience, not a
-// web server for the internet.
+// A tiny static server for app/ (Node 22, standard library only), so the
+// entry can be tried locally with no build step: `node serve.ts` serves
+// app/ on http://localhost:8080. It sends the MIME types an offline web app
+// needs, refuses any path outside app/, and does nothing else: a development
+// convenience, not a web server for the internet.
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -35,6 +33,9 @@ const MIME: Record<string, string> = {
   '.otf': 'font/otf',
   '.bin': 'application/octet-stream',
   '.wasm': 'application/wasm',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
   '.txt': 'text/plain; charset=utf-8',
 };
 
@@ -48,31 +49,27 @@ createServer((request, response) => {
     return;
   }
   if (pathname.endsWith('/')) pathname += 'index.html';
-  const file = resolve(join(root, normalize(pathname)));
-  if (file !== root && !file.startsWith(root + sep)) {
+  const file = resolve(root, '.' + normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, ''));
+  if (!file.startsWith(root + sep) && file !== root) {
     response.writeHead(403).end('forbidden');
     return;
   }
-  let size: number;
+  let stat;
   try {
-    const stats = statSync(file);
-    if (!stats.isFile()) throw new Error('not a file');
-    size = stats.size;
+    stat = statSync(file);
   } catch {
     response.writeHead(404).end('not found');
     return;
   }
+  if (!stat.isFile()) {
+    response.writeHead(404).end('not found');
+    return;
+  }
   response.writeHead(200, {
-    'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
-    'content-length': size,
-    'cache-control': 'no-store',
+    'Content-Type': MIME[extname(file).toLowerCase()] || 'application/octet-stream',
+    'Content-Length': stat.size,
   });
   createReadStream(file).pipe(response);
-}).listen(port, '127.0.0.1', () => {
-  console.log(`Vice Cover Studio is on http://localhost:${port}`);
-  console.log('Try the shots:');
-  console.log(`  hero cover (wide)   http://localhost:${port}/?shot=cover&layout=hero-mosaic&grade=sunset&title=VICE%20ROYALE&script=chasing%20the%20last%20light&w=1920&h=1080`);
-  console.log(`  editor              http://localhost:${port}/?shot=editor&layout=hero-mosaic&grade=sunset`);
-  console.log(`  hero cover (square) http://localhost:${port}/?shot=cover&layout=hero-three&grade=golden&title=PALM%20ROYALE&script=run%20the%20night&w=1080&h=1080`);
-  console.log(`  poster ink (tall)   http://localhost:${port}/?shot=cover&layout=seven-mosaic&grade=ink&title=MIDNIGHT%20VICE&script=after%20dark%2C%20everything%27s%20for%20sale&w=1024&h=1280`);
+}).listen(port, () => {
+  console.log(`Vice Cover Studio at http://localhost:${port}/`);
 });

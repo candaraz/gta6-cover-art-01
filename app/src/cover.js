@@ -1,528 +1,905 @@
-// cover.js — renders a GTA-style multi-panel cover onto a canvas.
-// The cover is a hero-centric poster: one big hero face, a cast of smaller
-// panels around it, a striped 3D title, a pink script line, a top quote band
-// and a bottom billing band. Everything is drawn in fractions of the cover
-// size so the same code renders 1920x1080, 1080x1080 and 1080x1350.
+// Vice Cover Studio — cover render engine (v5).
+// Draws a GTA-style multi-panel poster cover onto a 2d canvas from a plain
+// state object. No network, no libraries: every asset is a file under app/.
+// The engine is deliberately data-first: layouts are rect tables, grades are
+// per-photo transforms, and all poster furniture is drawn from primitives,
+// so the editor can re-render the same state at any size and the exporter
+// can re-render it at 1920x1080, 1080x1080 or 1080x1350 unchanged.
 
-export const LAYOUTS = [
-  { id: 'hero-mosaic', name: 'Hero Mosaic', desc: 'Big hero left, four cast panels right' },
-  { id: 'hero-three', name: 'Hero + Three', desc: 'Big hero on top, three cast panels below' },
-  { id: 'diagonal-trio', name: 'Diagonal Trio', desc: 'Hero with two panels on a diagonal' },
-  { id: 'seven-mosaic', name: 'Seven Mosaic', desc: 'Hero left, six cast panels right' },
-  { id: 'nine-grid', name: 'Nine Grid', desc: 'Nine equal panels, 3 by 3' },
-  { id: 'title-band', name: 'Title Band', desc: 'Panels on top, title in a clean band' },
+export const FONT_TITLE = '"Passion One", "Arial Black", sans-serif';
+export const FONT_SCRIPT = '"Yellowtail", cursive';
+export const FONT_LABEL = '"Barlow Condensed", "Arial Narrow", sans-serif';
+export const FONT_SEAL = '"Anton", "Arial Black", sans-serif';
+
+export const FONT_FILES = [
+  { family: 'Passion One', weight: 900, url: 'fonts/PassionOne-Black.ttf' },
+  { family: 'Passion One', weight: 700, url: 'fonts/PassionOne-Bold.ttf' },
+  { family: 'Passion One', weight: 400, url: 'fonts/PassionOne-Regular.ttf' },
+  { family: 'Yellowtail', weight: 400, url: 'fonts/Yellowtail-Regular.woff2' },
+  { family: 'Anton', weight: 400, url: 'fonts/Anton-Regular.ttf' },
+  { family: 'Barlow Condensed', weight: 400, url: 'fonts/BarlowCondensed-Regular.ttf' },
+  { family: 'Barlow Condensed', weight: 600, url: 'fonts/BarlowCondensed-SemiBold.ttf' },
+  { family: 'Barlow Condensed', weight: 700, url: 'fonts/BarlowCondensed-Bold.ttf' },
+  { family: 'Barlow Condensed', weight: 800, url: 'fonts/BarlowCondensed-ExtraBold.ttf' },
 ];
 
-export const GRADES = [
-  { id: 'sunset', name: 'Sunset', filter: 'saturate(1.35) contrast(1.08) sepia(0.15)', tint: 'rgba(255,110,40,0.10)', tintMode: 'screen' },
-  { id: 'neon', name: 'Neon Night', filter: 'saturate(1.55) contrast(1.12) hue-rotate(-18deg)', tint: 'rgba(180,40,255,0.10)', tintMode: 'screen' },
-  { id: 'golden', name: 'Golden Hour', filter: 'saturate(1.30) contrast(1.05) sepia(0.32)', tint: 'rgba(255,190,60,0.14)', tintMode: 'screen' },
-  { id: 'ink', name: 'Poster Ink', filter: 'saturate(0.35) contrast(1.55) brightness(1.02)', tint: 'rgba(255,45,136,0.10)', tintMode: 'screen' },
-  { id: 'teal', name: 'Tropic Teal', filter: 'saturate(1.30) contrast(1.08) hue-rotate(24deg)', tint: 'rgba(0,190,180,0.10)', tintMode: 'screen' },
-  { id: 'heatwave', name: 'Heatwave', filter: 'saturate(1.50) contrast(1.10) sepia(0.25)', tint: 'rgba(255,60,20,0.12)', tintMode: 'screen' },
+let fontsReady = false;
+export async function ensureFonts() {
+  if (fontsReady) return;
+  const loads = [];
+  for (const f of FONT_FILES) {
+    try {
+      const face = new FontFace(f.family, `url(${f.url})`, { weight: String(f.weight) });
+      const loaded = await face.load();
+      document.fonts.add(loaded);
+      loads.push(loaded);
+    } catch (e) { /* a missing face falls back to the system stack */ }
+  }
+  try {
+    await Promise.all([
+      document.fonts.load('900 100px "Passion One"'),
+      document.fonts.load('400 60px "Yellowtail"'),
+      document.fonts.load('800 40px "Barlow Condensed"'),
+      document.fonts.load('400 40px "Anton"'),
+    ]);
+  } catch (e) { /* fallbacks are fine */ }
+  fontsReady = true;
+}
+
+// ---------------------------------------------------------------- scenes
+// The default cast: nine original model-made portraits, each with a role, a
+// time and a one-line tagline, plus two place scenes and the kit's samples.
+// Roles are invented for this studio; no real person is depicted.
+
+export const CAST = [
+  { id: 'fixer',    role: 'THE FIXER',    time: '6:12 PM',  line: 'THE MAN WITH THE PLAN',      scene: 'scenes/fixer.jpg',    hero: true },
+  { id: 'getaway',  role: 'THE GETAWAY',  time: '11:40 PM', line: 'NEVER CAUGHT',               scene: 'scenes/getaway.jpg' },
+  { id: 'crew',     role: 'THE CREW',     time: '5:05 PM',  line: 'LOYAL TO THE END',           scene: 'scenes/crew.jpg' },
+  { id: 'angler',   role: 'THE ANGLER',   time: '5:48 AM',  line: 'PATIENCE PAYS',              scene: 'scenes/angler.jpg' },
+  { id: 'tourist',  role: 'THE TOURIST',  time: '12:20 PM', line: 'SHE SAW IT ALL',             scene: 'scenes/tourist.jpg' },
+  { id: 'lookout',  role: 'THE LOOKOUT',  time: '8:15 PM',  line: 'EYES ON THE HARBOR',         scene: 'scenes/lookout.jpg' },
+  { id: 'mechanic', role: 'THE MECHANIC', time: '9:30 PM',  line: 'SHE BUILDS FAST',            scene: 'scenes/mechanic.jpg' },
+  { id: 'insider',  role: 'THE INSIDER',  time: '10:02 PM', line: 'SHE KNOWS IT ALL',           scene: 'scenes/insider.jpg' },
+  { id: 'courier',  role: 'THE COURIER',  time: '7:45 AM',  line: 'FASTER THAN THE LAW',        scene: 'scenes/courier.jpg' },
+  { id: 'coast',    role: 'PALM ROW',     time: '6:40 PM',  line: 'THE ROAD GOES ON',           scene: 'scenes/coast.jpg',     place: true },
+  { id: 'neon',     role: 'NEON ROW',     time: '1:15 AM',  line: 'NEVER SLEEPS',               scene: 'scenes/neonstreet.jpg', place: true },
+  { id: 'boulevard', role: 'OLD PIER',    time: '5:40 PM',  line: 'ONE MORE CAST',              scene: 'samples/boulevard.jpg', place: true },
+  { id: 'pier',     role: 'OCEAN DRIVE',  time: '7:02 PM',  line: 'SALT IN THE AIR',            scene: 'samples/pier.jpg',     place: true },
 ];
 
-export const STRIPES = {
-  sunset: ['#FFD23F', '#FF9E2C', '#FF5E3A', '#FF2E88', '#C724B1'],
-  neon: ['#00F0FF', '#7B5CFF', '#FF2E88', '#FF5E3A', '#FFD23F'],
-  golden: ['#FFF3B0', '#FFD23F', '#FF9E2C', '#C97B2D', '#8A5A2B'],
-  ink: ['#FFFFFF', '#E8E8E8', '#B8B8B8', '#5A5A5A', '#1A1A1A'],
-  teal: ['#A8FFF0', '#2DE1C2', '#0EA5A5', '#2563EB', '#7B5CFF'],
-  heatwave: ['#FFE45E', '#FFB03A', '#FF5E3A', '#E11D48', '#7F1D1D'],
-};
+export const HERO_POP_SCENE = 'scenes/hero-pop.jpg';
 
-export const DEFAULT_CAST = [
-  { scene: 'fixer', role: 'THE FIXER', sub: '6:12 PM — THE MAN WITH THE PLAN' },
-  { scene: 'getaway', role: 'THE GETAWAY', sub: '11:40 PM — NEVER CAUGHT, NEVER LATE' },
-  { scene: 'crew', role: 'THE CREW', sub: '5:05 PM — LOYAL TO THE LAST SUNSET' },
-  { scene: 'angler', role: 'THE ANGLER', sub: '5:48 AM — PATIENCE IS A WEAPON' },
-  { scene: 'tourist', role: 'THE TOURIST', sub: '12:20 PM — SHE SAW EVERYTHING' },
-  { scene: 'lookout', role: 'THE LOOKOUT', sub: '8:15 PM — EYES ON THE HARBOR' },
-  { scene: 'mechanic', role: 'THE MECHANIC', sub: '9:30 PM — SHE BUILDS THE ESCAPE' },
-  { scene: 'insider', role: 'THE INSIDER', sub: '10:05 PM — HE KNOWS THE SAFE CODE' },
-  { scene: 'courier', role: 'THE COURIER', sub: '7:02 PM — THE PACKAGE ALWAYS ARRIVES' },
-];
-
-export const PLACE_SCENES = [
-  { scene: 'coast', role: 'THE COAST', sub: '4:44 PM — WHERE IT ALL BEGAN' },
-  { scene: 'neonstreet', role: 'NEON ROW', sub: '1:12 AM — THE CITY NEVER SLEEPS' },
-];
+export function defaultPanels() {
+  // Nine cast panels, hero first; each carries its own crop state.
+  return CAST.slice(0, 9).map((c) => ({
+    scene: c.scene, role: c.role, time: c.time, line: c.line,
+    zoom: 1, dx: 0, dy: 0, flip: false, face: false,
+  }));
+}
 
 export function defaultState() {
   return {
-    layout: 'hero-mosaic',
-    grade: 'sunset',
     title: 'VICE ROYALE',
     script: 'chasing the last light',
     quote: 'SUNSET, SMOKE AND STOLEN GOLD',
     quoteSource: 'THE COAST LEDGER',
     tagline: 'EVERY SUNSET HAS A PRICE',
-    billing: 'A VICE ROYALE PICTURE · STARRING YOU',
-    billing2: 'MADE FROM YOUR OWN PHOTOS · GRADED BY HAND',
+    layout: 'hero-mosaic',
+    grade: 'sunset',
     furniture: true,
-    look: { paint: 50, grade: 50, halftone: 0, grain: 30, glow: 40 },
-    panels: DEFAULT_CAST.slice(0, 9).map((c) => ({
-      ...c, fx: 0.5, fy: 0.32, zoom: 1.0, face: true, src: null,
-    })),
+    goldFrame: true,
+    look: { paint: 0.5, gradeAmt: 1, halftone: 0.35, grain: 0.3, glow: 0.3 },
+    panels: defaultPanels(),
   };
 }
 
-// Panel rectangles as fractions of the panel area, plus which index is the hero.
-// The panel area is the cover minus the top quote band and the bottom band.
-export function panelRects(layout, count) {
-  const r = (x, y, w, h) => ({ x, y, w, h });
-  switch (layout) {
-    case 'hero-mosaic':
-      return { rects: [r(0, 0, 0.55, 1), r(0.55, 0, 0.225, 0.5), r(0.775, 0, 0.225, 0.5), r(0.55, 0.5, 0.225, 0.5), r(0.775, 0.5, 0.225, 0.5)], hero: 0 };
-    case 'hero-three':
-      return { rects: [r(0, 0, 1, 0.62), r(0, 0.62, 0.333, 0.38), r(0.333, 0.62, 0.334, 0.38), r(0.667, 0.62, 0.333, 0.38)], hero: 0 };
-    case 'diagonal-trio':
-      return { rects: [r(0, 0, 0.62, 1), r(0.62, 0, 0.38, 0.55), r(0.62, 0.55, 0.38, 0.45)], hero: 0 };
-    case 'seven-mosaic': {
-      const rects = [r(0, 0, 0.5, 1)];
-      for (let i = 0; i < 6; i++) rects.push(r(0.5 + (i % 2) * 0.25, Math.floor(i / 2) * 0.333, 0.25, 0.334));
-      return { rects, hero: 0 };
-    }
-    case 'nine-grid': {
-      const rects = [];
-      for (let i = 0; i < 9; i++) rects.push(r((i % 3) / 3, Math.floor(i / 3) / 3, 1 / 3, 1 / 3));
-      return { rects, hero: 0 };
-    }
-    case 'title-band': {
-      const rects = [];
-      for (let i = 0; i < Math.min(count, 6); i++) rects.push(r((i % 3) / 3, Math.floor(i / 3) * 0.5, 1 / 3, 0.5));
-      return { rects, hero: 0, band: true };
-    }
-    default:
-      return { rects: [r(0, 0, 1, 1)], hero: 0 };
-  }
+// ---------------------------------------------------------------- layouts
+// Every layout is a function of (W, H) returning panel rects in pixels plus
+// the title anchor. Rects are {x, y, w, h, tilt} in the cover's own space;
+// the top quote band and the bottom band are drawn by the renderer, not by
+// the layout, so layouts only place art. tilt is degrees (slanted layouts).
+
+const QB = 0.052; // top quote band height, fraction of H
+const BB = 0.078; // bottom band height, fraction of H
+const GAP = 0.006; // panel gap, fraction of W
+
+function grid(W, H, cols, rows, x0, y0, x1, y1, gap) {
+  const g = gap ?? GAP * W;
+  const cw = (x1 - x0 - g * (cols - 1)) / cols;
+  const ch = (y1 - y0 - g * (rows - 1)) / rows;
+  const out = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      out.push({ x: x0 + c * (cw + g), y: y0 + r * (ch + g), w: cw, h: ch, tilt: 0 });
+  return out;
 }
 
-function coverFit(img, rw, rh, fx, fy, zoom) {
-  const iw = img.naturalWidth || img.width;
-  const ih = img.naturalHeight || img.height;
-  const s = Math.max(rw / iw, rh / ih) * zoom;
+export const LAYOUTS = {
+  'hero-mosaic': {
+    label: 'Hero Mosaic', hero: 0,
+    rects(W, H) {
+      const top = QB * H, bot = H - BB * H, g = GAP * W;
+      const heroW = 0.55 * W;
+      const right = grid(W, H, 2, 2, heroW + g, top, W, bot, g);
+      return [{ x: 0, y: top, w: heroW, h: bot - top, tilt: 0 }, ...right];
+    },
+    titleY: (H) => 0.66 * H,
+  },
+  'hero-three': {
+    label: 'Hero + Three', hero: 0,
+    rects(W, H) {
+      const top = QB * H, bot = H - BB * H, g = GAP * W;
+      const heroH = 0.60 * (bot - top);
+      const row = grid(W, H, 3, 1, 0, top + heroH + g, W, bot, g);
+      return [{ x: 0, y: top, w: W, h: heroH, tilt: 0 }, ...row];
+    },
+    titleY: (H) => 0.52 * H,
+  },
+  'diagonal-trio': {
+    label: 'Diagonal Trio', hero: 0,
+    rects(W, H) {
+      const top = QB * H, bot = H - BB * H, g = GAP * W;
+      const heroW = 0.60 * W;
+      const r = grid(W, H, 1, 2, heroW + g, top + 0.03 * H, W, bot - 0.03 * H, g);
+      r[0].tilt = 0; r[1].tilt = 0;
+      return [{ x: 0, y: top, w: heroW, h: bot - top, tilt: 0 }, ...r];
+    },
+    titleY: (H) => 0.60 * H,
+  },
+  'seven-mosaic': {
+    label: 'Seven Mosaic', hero: 0,
+    rects(W, H) {
+      const top = QB * H, bot = H - BB * H, g = GAP * W;
+      const heroW = 0.50 * W;
+      const right = grid(W, H, 2, 3, heroW + g, top, W, bot, g);
+      return [{ x: 0, y: top, w: heroW, h: bot - top, tilt: 0 }, ...right];
+    },
+    titleY: (H) => 0.60 * H,
+  },
+  'pop-out': {
+    label: 'Pop-Out Hero', hero: 0, popOut: true,
+    rects(W, H) {
+      const top = QB * H, bot = H - BB * H, g = GAP * W;
+      const heroW = 0.58 * W;
+      const right = grid(W, H, 2, 2, heroW + g, top, W, bot, g);
+      return [{ x: 0, y: top, w: heroW, h: bot - top, tilt: 0, pop: true }, ...right];
+    },
+    titleY: (H) => 0.64 * H,
+  },
+  'slanted': {
+    label: 'Slanted Cast', hero: 0, slanted: true,
+    rects(W, H) {
+      const top = QB * H, bot = H - BB * H, g = GAP * W;
+      // A zigzag of six tilted panels in two rows, with a clear middle gap
+      // for the title — so no face sits under the title band.
+      const topH = 0.328 * H, botY = 0.62 * H, botH = bot - botY;
+      return [
+        { x: 0.02 * W, y: top, w: 0.38 * W, h: topH, tilt: -4 },
+        { x: 0.42 * W, y: top + 0.02 * H, w: 0.28 * W, h: topH * 0.92, tilt: 5 },
+        { x: 0.72 * W, y: top, w: 0.26 * W, h: topH * 0.98, tilt: -3 },
+        { x: 0.03 * W, y: botY, w: 0.28 * W, h: botH, tilt: 4 },
+        { x: 0.35 * W, y: botY + 0.02 * H, w: 0.28 * W, h: botH * 0.93, tilt: -5 },
+        { x: 0.65 * W, y: botY, w: 0.32 * W, h: botH, tilt: 3 },
+      ];
+    },
+    titleY: (H) => 0.52 * H,
+  },
+  'nine-grid': {
+    label: 'Nine Grid', hero: 0,
+    rects(W, H) {
+      const top = QB * H, bot = H - BB * H;
+      return grid(W, H, 3, 3, 0, top, W, bot, GAP * W);
+    },
+    titleY: (H) => 0.58 * H,
+  },
+  'title-band': {
+    label: 'Title Band', hero: -1,
+    rects(W, H) {
+      const top = QB * H, bot = H * 0.66;
+      return grid(W, H, 3, 2, 0, top, W, bot, GAP * W);
+    },
+    titleY: (H) => 0.76 * H,
+  },
+};
+
+export const LAYOUT_IDS = Object.keys(LAYOUTS);
+
+// ---------------------------------------------------------------- grades
+// A grade is { filter, overlay } applied to each photo before it is drawn:
+// filter is a CSS filter string for the fast path; overlay is a per-pixel
+// transform id used by the cached graded-photo path (posterize / duotone /
+// painted). gradeAmt scales the overlay strength via the look sliders.
+
+export const GRADES = {
+  sunset:      { label: 'Sunset',      filter: 'saturate(1.25) contrast(1.06) brightness(1.02) sepia(0.22) hue-rotate(-8deg)', overlay: 'warm' },
+  neon:        { label: 'Neon Night',  filter: 'saturate(1.45) contrast(1.12) brightness(0.96) hue-rotate(18deg)', overlay: 'cool' },
+  golden:      { label: 'Golden Hour', filter: 'saturate(1.3) contrast(1.05) brightness(1.06) sepia(0.35) hue-rotate(-14deg)', overlay: 'gold' },
+  'poster-ink':{ label: 'Poster Ink',  filter: 'saturate(1.1) contrast(1.18)', overlay: 'ink' },
+  teal:        { label: 'Tropic Teal', filter: 'saturate(1.35) contrast(1.06) hue-rotate(28deg)', overlay: 'teal' },
+  heatwave:    { label: 'Heatwave',    filter: 'saturate(1.6) contrast(1.16) brightness(1.0) sepia(0.3) hue-rotate(-22deg)', overlay: 'heat' },
+  painted:     { label: 'Painted',     filter: 'saturate(1.35) contrast(1.1)', overlay: 'painted' },
+  twilight:    { label: 'Twilight Gold', filter: 'saturate(1.3) contrast(1.1) brightness(0.98) hue-rotate(24deg) sepia(0.15)', overlay: 'dusk' },
+};
+
+export const GRADE_IDS = Object.keys(GRADES);
+
+// ---------------------------------------------------------------- helpers
+
+export function fitText(ctx, text, maxW, startPx, font, minPx) {
+  // Shrink a font until the text fits maxW; returns the size used.
+  let px = startPx;
+  ctx.font = font(px);
+  while (px > (minPx || 10) && ctx.measureText(text).width > maxW) {
+    px -= 2;
+    ctx.font = font(px);
+  }
+  return px;
+}
+
+export function coverRect(img, rect, zoom, dx, dy, face) {
+  // Cover-fit an image into rect, with zoom/pan and a face bias (faces sit
+  // in the upper third, so the face toggle re-centres the crop there).
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const s = Math.max(rect.w / iw, rect.h / ih) * (zoom || 1);
   const dw = iw * s, dh = ih * s;
-  const dx = (rw - dw) * fx, dy = (rh - dh) * fy;
-  return { dx, dy, dw, dh };
+  let cx = rect.x + rect.w / 2 - dw / 2 + (dx || 0) * rect.w * 0.4;
+  let cy = rect.y + rect.h / 2 - dh / 2 + (dy || 0) * rect.h * 0.4;
+  if (face) cy = rect.y + rect.h * 0.32 - dh * 0.32;
+  // Clamp so the image never leaves a gap inside the rect.
+  cx = Math.min(rect.x, Math.max(rect.x + rect.w - dw, cx));
+  cy = Math.min(rect.y, Math.max(rect.y + rect.h - dh, cy));
+  return { x: cx, y: cy, w: dw, h: dh };
 }
 
-function gradeOf(id) {
-  return GRADES.find((g) => g.id === id) || GRADES[0];
+function mulberry(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-function drawPanelImage(ctx, img, rect, panel, grade, look) {
-  const { x, y, w, h } = rect;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  // Grade filter: paint slider pushes saturation, grade slider pushes the tint.
-  const g = gradeOf(grade);
-  const paint = (look.paint - 50) / 50;
-  const sat = Math.max(0.4, 1 + paint * 0.5);
-  ctx.filter = g.filter.replace(/saturate\([\d.]+\)/, `saturate(${Math.min(2.2, parseFloat(g.filter.match(/saturate\(([\d.]+)\)/)[1]) * sat).toFixed(2)})`);
-  const fy = panel.face ? Math.min(panel.fy, 0.32) : panel.fy;
-  const fit = coverFit(img, w, h, panel.fx, fy, panel.zoom);
-  ctx.drawImage(img, x + fit.dx, y + fit.dy, fit.dw, fit.dh);
-  ctx.filter = 'none';
-  // Grade tint.
-  ctx.globalCompositeOperation = g.tintMode;
-  ctx.globalAlpha = 0.4 + (look.grade / 100) * 0.8;
-  ctx.fillStyle = g.tint;
-  ctx.fillRect(x, y, w, h);
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'source-over';
-  // Poster Ink: a light duotone wash + halftone dots (kept light so the
-  // faces stay readable — a heavy multiply turns the panels black).
-  if (grade === 'ink') {
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = 'rgba(120,20,90,0.14)';
-    ctx.fillRect(x, y, w, h);
-    ctx.globalCompositeOperation = 'screen';
-    ctx.fillStyle = 'rgba(255,120,180,0.10)';
-    ctx.fillRect(x, y, w, h);
-    ctx.globalCompositeOperation = 'source-over';
-    const dot = Math.max(5, w / 90);
-    ctx.fillStyle = 'rgba(20,0,40,0.16)';
-    for (let yy = y + dot; yy < y + h; yy += dot * 2) {
-      for (let xx = x + dot; xx < x + w; xx += dot * 2) ctx.fillRect(xx, yy, dot * 0.55, dot * 0.55);
+export function noiseCanvas(size, alpha) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const img = g.createImageData(size, size);
+  const rnd = mulberry(1337);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.floor(rnd() * 255);
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = Math.floor(alpha * 255 * rnd());
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
+// ---------------------------------------------------------------- grading
+// Graded photos are cached per (scene, grade, look.paint) at a capped size
+// so a re-render never re-runs the per-pixel pass. The fast grades use the
+// CSS filter path; the poster/painted grades run a small per-pixel pass on a
+// downscaled copy and cache the result.
+
+const gradeCache = new Map();
+const MAX_GRADE_W = 720;
+
+function gradeKey(scene, gradeId, paint) {
+  return scene + '|' + gradeId + '|' + Math.round(paint * 10);
+}
+
+function posterize(v, levels) {
+  return Math.round((v / 255) * (levels - 1)) / (levels - 1) * 255;
+}
+
+function edgeMap(srcCtx, w, h) {
+  // Sobel luminance edges on a tiny copy; returns a canvas of dark strokes.
+  const small = document.createElement('canvas');
+  const sw = 160, sh = Math.max(1, Math.round(160 * h / w));
+  small.width = sw; small.height = sh;
+  const sg = small.getContext('2d');
+  sg.drawImage(srcCtx.canvas, 0, 0, sw, sh);
+  const src = sg.getImageData(0, 0, sw, sh);
+  const out = sg.createImageData(sw, sh);
+  const lum = new Float32Array(sw * sh);
+  for (let i = 0; i < sw * sh; i++)
+    lum[i] = 0.299 * src.data[i * 4] + 0.587 * src.data[i * 4 + 1] + 0.114 * src.data[i * 4 + 2];
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      const xm = x > 0 ? lum[y * sw + x - 1] : lum[y * sw + x];
+      const xp = x < sw - 1 ? lum[y * sw + x + 1] : lum[y * sw + x];
+      const ym = y > 0 ? lum[(y - 1) * sw + x] : lum[y * sw + x];
+      const yp = y < sh - 1 ? lum[(y + 1) * sw + x] : lum[y * sw + x];
+      const e = Math.min(255, Math.abs(xp - xm) + Math.abs(yp - ym));
+      const o = (y * sw + x) * 4;
+      const ink = e > 26 ? 255 - Math.min(255, (e - 26) * 3) : 255;
+      out.data[o] = out.data[o + 1] = out.data[o + 2] = ink;
+      out.data[o + 3] = 255;
     }
   }
-  if (look.halftone > 0) {
-    const dot = Math.max(4, w / 110);
-    ctx.fillStyle = `rgba(0,0,0,${(look.halftone / 100) * 0.22})`;
-    for (let yy = y + dot; yy < y + h; yy += dot * 2) {
-      for (let xx = x + dot; xx < x + w; xx += dot * 2) ctx.fillRect(xx, yy, dot * 0.5, dot * 0.5);
+  sg.putImageData(out, 0, 0);
+  return small;
+}
+
+export function gradedPhoto(img, gradeId, look) {
+  const key = gradeKey(img.src || img.currentSrc || '', gradeId, look.paint);
+  const hit = gradeCache.get(key);
+  if (hit) return hit;
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const scale = Math.min(1, MAX_GRADE_W / iw);
+  const w = Math.max(2, Math.round(iw * scale)), h = Math.max(2, Math.round(ih * scale));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const grade = GRADES[gradeId] || GRADES.sunset;
+  g.filter = grade.filter;
+  g.drawImage(img, 0, 0, w, h);
+  g.filter = 'none';
+  const ov = grade.overlay;
+  if (ov === 'ink' || ov === 'painted' || ov === 'warm' || ov === 'cool' || ov === 'gold' || ov === 'teal' || ov === 'heat' || ov === 'dusk') {
+    const data = g.getImageData(0, 0, w, h);
+    const d = data.data;
+    const levels = ov === 'painted' ? 7 : ov === 'ink' ? 6 : 0;
+    for (let i = 0; i < d.length; i += 4) {
+      let r = d[i], gg = d[i + 1], b = d[i + 2];
+      if (levels) {
+        r = posterize(r, levels); gg = posterize(gg, levels); b = posterize(b, levels);
+      }
+      if (ov === 'warm') { r = Math.min(255, r * 1.08 + 10); b = Math.max(0, b * 0.92 - 6); }
+      if (ov === 'cool') { b = Math.min(255, b * 1.12 + 8); r = Math.max(0, r * 0.94 - 4); }
+      if (ov === 'gold') { r = Math.min(255, r * 1.1 + 12); gg = Math.min(255, gg * 1.04 + 4); b = Math.max(0, b * 0.86 - 8); }
+      if (ov === 'teal') { gg = Math.min(255, gg * 1.1 + 6); b = Math.min(255, b * 1.1 + 6); r = Math.max(0, r * 0.92 - 4); }
+      if (ov === 'heat') { r = Math.min(255, r * 1.14 + 14); gg = Math.max(0, gg * 0.94); b = Math.max(0, b * 0.82 - 10); }
+      if (ov === 'dusk') { b = Math.min(255, b * 1.14 + 10); r = Math.min(255, r * 1.02 + 4); gg = Math.max(0, gg * 0.96); }
+      if (ov === 'ink') {
+        // Duotone: pink shadows, cream highlights.
+        const l = 0.299 * r + 0.587 * gg + 0.114 * b;
+        const t = l / 255;
+        r = Math.round(38 + t * 214); gg = Math.round(16 + t * 178); b = Math.round(64 + t * 150);
+      }
+      if (ov === 'painted') {
+        // Flat colour with a warm rim: gentle saturation lift, flat midtones.
+        const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+        const sat = mx === 0 ? 0 : (mx - mn) / mx;
+        const boost = 1 + 0.18 * look.paint;
+        r = Math.min(255, r * (1 + sat * 0.18 * boost));
+        gg = Math.min(255, gg * (1 + sat * 0.10 * boost));
+        b = Math.max(0, b * (1 - sat * 0.05));
+      }
+      d[i] = r; d[i + 1] = gg; d[i + 2] = b;
     }
+    g.putImageData(data, 0, 0);
   }
-  // Glow: a soft warm wash at the panel's top.
-  if (look.glow > 0) {
-    const grad = ctx.createLinearGradient(x, y, x, y + h * 0.5);
-    grad.addColorStop(0, `rgba(255,180,90,${(look.glow / 100) * 0.16})`);
-    grad.addColorStop(1, 'rgba(255,180,90,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(x, y, w, h * 0.5);
+  if (ov === 'painted' || ov === 'ink') {
+    // Ink outlines: draw the edge map over the photo, lightly.
+    const edges = edgeMap(g, w, h);
+    g.globalAlpha = ov === 'painted' ? 0.10 + 0.12 * look.paint : 0.16;
+    g.globalCompositeOperation = 'multiply';
+    g.drawImage(edges, 0, 0, w, h);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
   }
-  // Grain.
-  if (look.grain > 0) {
-    const n = Math.floor((w * h) / 9000) * (look.grain / 30);
-    ctx.fillStyle = 'rgba(255,255,255,0.05)';
-    for (let i = 0; i < n; i++) ctx.fillRect(x + Math.random() * w, y + Math.random() * h, 1.4, 1.4);
-    ctx.fillStyle = 'rgba(0,0,0,0.05)';
-    for (let i = 0; i < n; i++) ctx.fillRect(x + Math.random() * w, y + Math.random() * h, 1.4, 1.4);
-  }
-  ctx.restore();
+  gradeCache.set(key, c);
+  return c;
 }
 
-function fitFont(ctx, text, font, maxW, start) {
-  let size = start;
-  ctx.font = font(size);
-  while (size > 12 && ctx.measureText(text).width > maxW) {
-    size -= 2;
-    ctx.font = font(size);
-  }
-  return size;
+// ---------------------------------------------------------------- title
+
+function stripeGradient(ctx, x, y, w, h, gradeId) {
+  // Horizontal retro stripes: the banded 80s fill the top entries use.
+  const bands = {
+    sunset: ['#FFD23F', '#FF9E3D', '#FF5E7A', '#E83E8C'],
+    neon: ['#7DF9FF', '#4D7CFE', '#B14BFF', '#FF4BD8'],
+    golden: ['#FFF3B0', '#FFD23F', '#F5A623', '#C97B1A'],
+    'poster-ink': ['#F5F5F5', '#D9D9D9', '#9A9A9A', '#4A4A4A'],
+    teal: ['#A8F0E0', '#4FD1C5', '#2B9FD8', '#1B6FB8'],
+    heatwave: ['#FFE259', '#FF7B2F', '#FF3D3D', '#C9184A'],
+    painted: ['#FFD23F', '#FF9E3D', '#FF5E7A', '#7C4DFF'],
+    twilight: ['#FFD98E', '#E8A54B', '#9B5DE5', '#5A189A'],
+  }[gradeId] || ['#FFD23F', '#FF9E3D', '#FF5E7A', '#E83E8C'];
+  const grad = ctx.createLinearGradient(0, y, 0, y + h);
+  const n = bands.length;
+  bands.forEach((col, i) => {
+    grad.addColorStop(i / n, col);
+    grad.addColorStop((i + 1) / n - 0.001, col);
+  });
+  return grad;
 }
 
-function drawStripedTitle(ctx, text, cx, top, maxW, grade, H) {
-  // Measure on the offscreen context itself, so the size that fits the
-  // offscreen canvas is the size that is drawn (measuring on the main
-  // context with a different font loaded would overflow the canvas).
-  const stripes = STRIPES[grade] || STRIPES.sunset;
-  let size = Math.round(H * 0.17);
-  const off = document.createElement('canvas');
-  const o = off.getContext('2d');
-  const setFont = (s) => { o.font = `900 ${s}px "Passion One", sans-serif`; };
-  setFont(size);
-  while (size > 24 && o.measureText(text).width > maxW) {
-    size -= 4;
-    setFont(size);
-  }
-  off.width = Math.ceil(Math.min(maxW, o.measureText(text).width + size * 0.3));
-  off.height = Math.ceil(size * 1.3);
-  setFont(size);
-  o.textAlign = 'center';
-  o.textBaseline = 'alphabetic';
-  const tx = off.width / 2, ty = size * 1.02;
-  // 3D extrusion: layered copies stepping down-right in deep purple.
-  o.fillStyle = '#2A0A4A';
-  for (let i = 6; i >= 1; i--) o.fillText(text, tx + i * size * 0.028, ty + i * size * 0.028);
-  // Main fill in white, then thin retro stripes clipped to it.
-  o.fillStyle = '#FFFFFF';
-  o.fillText(text, tx, ty);
-  o.globalCompositeOperation = 'source-atop';
-  const bands = stripes.length * 2;
-  const band = off.height / bands;
-  for (let i = 0; i < bands; i++) {
-    o.fillStyle = stripes[i % stripes.length];
-    o.fillRect(0, i * band, off.width, band + 1);
-  }
-  o.globalCompositeOperation = 'source-over';
-  // Thick black outline.
-  o.lineWidth = Math.max(3, size * 0.045);
-  o.strokeStyle = '#14081F';
-  o.lineJoin = 'round';
-  o.strokeText(text, tx, ty);
-  ctx.drawImage(off, cx - off.width / 2, top);
-  return { size, height: off.height, width: off.width };
-}
-
-function drawRoleLabel(ctx, panel, rect, titleTop, titleBottom, H) {
-  const pad = Math.max(8, H * 0.012);
-  const labelH = H * 0.075;
-  const lx = rect.x + pad, ly = rect.y + rect.h - labelH - pad;
-  // Skip a label that would sit inside the title band — the title draws
-  // over the panels, so a label there would collide with it (or be covered).
-  if (ly < titleBottom && ly + labelH > titleTop) return;
-  // Set the role font BEFORE measuring, so the box fits the text.
-  const roleSize = fitFont(ctx, panel.role, (s) => `800 ${s}px "Barlow Condensed", sans-serif`, rect.w - pad * 2, Math.round(H * 0.032));
-  ctx.font = `800 ${roleSize}px "Barlow Condensed", sans-serif`;
-  const roleW = ctx.measureText(panel.role).width;
-  const subSize = Math.max(10, Math.round(H * 0.016));
-  ctx.font = `600 ${subSize}px "Barlow Condensed", sans-serif`;
-  const subW = ctx.measureText(panel.sub || '').width;
-  const boxW = Math.min(Math.max(roleW, subW) + pad * 1.6, rect.w - pad);
+export function drawTitle(ctx, state, W, H, titleY) {
+  const title = (state.title || 'VICE ROYALE').toUpperCase();
+  const maxW = W * 0.92;
+  const startPx = Math.round(H * 0.185);
+  const px = fitText(ctx, title, maxW, startPx, (s) => `900 ${s}px ${FONT_TITLE}`, Math.round(H * 0.05));
+  const font = (s) => `900 ${s}px ${FONT_TITLE}`;
+  const tw = ctx.measureText(title).width;
+  const x0 = (W - tw) / 2;
+  const y = titleY;
+  // 6-step deep-purple extrusion, then the striped fill, then a black outline.
   ctx.save();
-  ctx.fillStyle = 'rgba(10,4,18,0.88)';
-  ctx.fillRect(lx - pad * 0.5, ly - pad * 0.4, boxW, labelH);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = `800 ${roleSize}px "Barlow Condensed", sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText(panel.role, lx, ly + roleSize * 0.95, boxW - pad);
-  ctx.fillStyle = '#FFC9A3';
-  ctx.font = `600 ${subSize}px "Barlow Condensed", sans-serif`;
-  ctx.fillText(panel.sub || '', lx, ly + roleSize + subSize * 1.15, boxW - pad);
-  ctx.restore();
-}
-
-function drawPalmBand(ctx, x, y, w, h) {
-  // Sunset gradient + bold palm silhouettes. The palm is drawn in absolute
-  // pixels from its size S (no extra scale on top of it — scaling a palm
-  // drawn at band height by the band height again made giant dark bars).
-  const grad = ctx.createLinearGradient(x, y, x, y + h);
-  grad.addColorStop(0, '#FF9E2C');
-  grad.addColorStop(0.5, '#FF5E3A');
-  grad.addColorStop(1, '#C724B1');
-  ctx.fillStyle = grad;
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = 'rgba(20,4,30,0.80)';
-  const palm = (px, py, S, flip) => {
-    ctx.save();
-    ctx.translate(px, py);
-    if (flip) ctx.scale(-1, 1);
-    // Trunk: a thick curve leaning slightly, height S.
-    ctx.beginPath();
-    ctx.moveTo(-S * 0.03, 0);
-    ctx.quadraticCurveTo(S * 0.02, -S * 0.45, S * 0.10, -S * 0.80);
-    ctx.lineTo(S * 0.16, -S * 0.78);
-    ctx.quadraticCurveTo(S * 0.08, -S * 0.42, S * 0.05, 0);
-    ctx.closePath();
-    ctx.fill();
-    // Fronds: wide arcs fanning from the crown, drooping at the tips.
-    const cx = S * 0.13, cy = -S * 0.80;
-    for (let i = 0; i < 7; i++) {
-      const a = (-0.15 - i * 0.28) * Math.PI;
-      const len = S * (0.55 + (i % 3) * 0.08);
-      const ex = cx + Math.cos(a) * len;
-      const ey = cy + Math.sin(a) * len * 0.7 + S * 0.18;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.quadraticCurveTo(cx + Math.cos(a) * len * 0.55, cy + Math.sin(a) * len * 0.45 - S * 0.06, ex, ey);
-      ctx.quadraticCurveTo(cx + Math.cos(a) * len * 0.5, cy + Math.sin(a) * len * 0.5 + S * 0.10, cx, cy);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-  };
-  palm(x + w * 0.05, y + h, h * 0.95, false);
-  palm(x + w * 0.95, y + h, h * 0.85, true);
-  palm(x + w * 0.5, y + h, h * 0.6, false);
-}
-
-function drawBarcode(ctx, x, y, w, h) {
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
-  ctx.fillStyle = '#111111';
-  let bx = x;
-  let seed = 7;
-  while (bx < x + w - 3) {
-    seed = (seed * 16807) % 2147483647;
-    const bw = 1 + (seed % 4);
-    if (seed % 3 !== 0) ctx.fillRect(bx, y, bw, h);
-    bx += bw + 1 + (seed % 2);
+  const steps = 6;
+  for (let i = steps; i >= 1; i--) {
+    ctx.font = font(px);
+    ctx.fillStyle = `rgba(46, 8, 84, ${0.55 + 0.08 * i})`;
+    ctx.fillText(title, x0 + i * px * 0.045, y + i * px * 0.055);
   }
+  ctx.font = font(px);
+  ctx.fillStyle = stripeGradient(ctx, x0, y - px * 0.82, tw, px, state.grade);
+  ctx.fillText(title, x0, y);
+  ctx.lineWidth = Math.max(2, px * 0.045);
+  ctx.strokeStyle = '#12061F';
+  ctx.lineJoin = 'round';
+  ctx.strokeText(title, x0, y);
+  ctx.restore();
+  return { x: x0, y, w: tw, h: px, px };
 }
 
-function drawSeal(ctx, cx, cy, r, label) {
+// ---------------------------------------------------------------- panels
+
+export function drawPanel(ctx, img, panel, rect, gradeId, look, opts) {
+  const o = opts || {};
+  // Keep the layout rect: the border is drawn in the panel's own (possibly
+  // rotated) frame, but the caller needs the upright rect for the label.
+  const orig = { x: rect.x, y: rect.y, w: rect.w, h: rect.h, tilt: rect.tilt || 0 };
   ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(-0.12);
-  ctx.fillStyle = '#FFD23F';
-  ctx.strokeStyle = '#8A5A2B';
-  ctx.lineWidth = Math.max(2, r * 0.08);
+  if (rect.tilt) {
+    ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
+    ctx.rotate((rect.tilt * Math.PI) / 180);
+    ctx.translate(-rect.w / 2, -rect.h / 2);
+    rect = { x: 0, y: 0, w: rect.w, h: rect.h };
+  }
+  // Clip to the panel, draw the graded photo cover-fit.
   ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 0.78, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = '#5A2A00';
-  ctx.font = `800 ${Math.round(r * 0.34)}px "Barlow Condensed", sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const words = label.split(' ');
-  ctx.fillText(words[0] || '', 0, -r * 0.22);
-  ctx.fillText(words.slice(1).join(' ') || '', 0, r * 0.22);
+  ctx.rect(rect.x, rect.y, rect.w, rect.h);
+  ctx.clip();
+  const graded = gradedPhoto(img, gradeId, look);
+  const r = coverRect(graded, rect, panel.zoom, panel.dx, panel.dy, panel.face);
+  if (panel.flip) {
+    ctx.translate(rect.x + rect.w / 2, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(-(rect.x + rect.w / 2), 0);
+  }
+  ctx.drawImage(graded, r.x, r.y, r.w, r.h);
+  // Halftone dots over the photo (strongest in Poster Ink / Painted).
+  const ht = look.halftone * (gradeId === 'poster-ink' || gradeId === 'painted' ? 1 : 0.35);
+  if (ht > 0.03) {
+    const step = Math.max(5, rect.w * 0.018);
+    ctx.fillStyle = `rgba(20, 6, 32, ${0.10 * ht})`;
+    for (let yy = rect.y + step / 2; yy < rect.y + rect.h; yy += step)
+      for (let xx = rect.x + step / 2; xx < rect.x + rect.w; xx += step) {
+        ctx.beginPath();
+        ctx.arc(xx, yy, Math.max(0.6, step * 0.10 * ht), 0, Math.PI * 2);
+        ctx.fill();
+      }
+  }
+  // Glow wash.
+  if (look.glow > 0.02) {
+    const glow = ctx.createRadialGradient(
+      rect.x + rect.w / 2, rect.y + rect.h * 0.25, 10,
+      rect.x + rect.w / 2, rect.y + rect.h / 2, Math.max(rect.w, rect.h) * 0.75);
+    glow.addColorStop(0, `rgba(255, 190, 90, ${0.14 * look.glow})`);
+    glow.addColorStop(1, 'rgba(255, 190, 90, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  }
+  ctx.restore();
+  // Panel border, drawn after restore (so it is not clipped) with the
+  // panel's tilt re-applied, so it hugs the photo instead of landing at
+  // the cover's corner.
+  const otilt = orig.tilt || 0;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(10, 4, 18, 0.85)';
+  ctx.lineWidth = Math.max(2, orig.w * 0.008);
+  if (otilt) {
+    ctx.translate(orig.x + orig.w / 2, orig.y + orig.h / 2);
+    ctx.rotate((otilt * Math.PI) / 180);
+    ctx.translate(-orig.w / 2, -orig.h / 2);
+    ctx.strokeRect(0, 0, orig.w, orig.h);
+  } else {
+    ctx.strokeRect(orig.x, orig.y, orig.w, orig.h);
+  }
+  ctx.restore();
+  return orig;
+}
+
+export function drawRoleLabel(ctx, panel, rect, skipZones, H) {
+  // Two-line caption: big role, smaller "TIME — TAGLINE". The label is sized
+  // from the panel's WIDTH (so a wide short panel never gets a giant label),
+  // capped at 8.5% of the cover height, clamped inside the panel, and
+  // skipped entirely when its box would cross the title band (skipZones:
+  // [{y0, y1}] in cover space).
+  const pad = Math.max(6, rect.w * 0.02);
+  const maxW = rect.w - pad * 2;
+  const cap = H ? H * 0.085 : Infinity;
+  const rolePx = fitText(ctx, panel.role, maxW, Math.min(rect.w * 0.28, rect.h * 0.14, cap), (s) => `800 ${s}px ${FONT_LABEL}`, 9);
+  ctx.font = `800 ${rolePx}px ${FONT_LABEL}`;
+  const roleW = ctx.measureText(panel.role).width;
+  const sub = `${panel.time} — ${panel.line}`;
+  const subPx = Math.max(8, Math.round(rolePx * 0.52));
+  const subSize = fitText(ctx, sub, maxW * 0.92, subPx, (s) => `700 ${s}px ${FONT_LABEL}`, 7);
+  ctx.font = `700 ${subSize}px ${FONT_LABEL}`;
+  const subW = ctx.measureText(sub).width;
+  const labelH = rolePx * 1.05 + subSize * 1.5 + pad * 1.1;
+  const lx = rect.x, ly = rect.y + rect.h - labelH;
+  const lw = Math.max(roleW, subW) + pad * 2;
+  if (skipZones) {
+    for (const z of skipZones) {
+      if (ly < z.y1 && ly + labelH > z.y0) return;
+    }
+  }
+  ctx.save();
+  ctx.fillStyle = 'rgba(8, 3, 16, 0.88)';
+  ctx.fillRect(lx, ly, lw, labelH);
+  ctx.fillStyle = '#FFF7E8';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = `800 ${rolePx}px ${FONT_LABEL}`;
+  ctx.fillText(panel.role, lx + pad, ly + rolePx * 0.95);
+  ctx.fillStyle = '#FFC9A3';
+  ctx.font = `700 ${subSize}px ${FONT_LABEL}`;
+  ctx.fillText(sub, lx + pad, ly + rolePx * 1.05 + subSize * 1.15);
   ctx.restore();
 }
 
-function drawPill(ctx, text, x, y, h, bg, fg) {
-  ctx.font = `800 ${Math.round(h * 0.52)}px "Barlow Condensed", sans-serif`;
-  const w = ctx.measureText(text).width + h * 1.1;
-  ctx.fillStyle = bg;
+// ---------------------------------------------------------------- furniture
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, h / 2);
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function pill(ctx, text, x, y, h, fg, bg, fontPx) {
+  ctx.save();
+  ctx.font = `800 ${fontPx}px ${FONT_LABEL}`;
+  const w = ctx.measureText(text).width + h * 1.1;
+  roundRect(ctx, x, y, w, h, h / 2);
+  ctx.fillStyle = bg;
   ctx.fill();
   ctx.fillStyle = fg;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + w / 2, y + h / 2 + 1);
+  ctx.fillText(text, x + w / 2, y + h / 2 + fontPx * 0.04);
+  ctx.restore();
   return w;
 }
 
-// ---- the cover itself ----
+function drawStarburst(ctx, cx, cy, R, text) {
+  // Spiky sunburst seal: alternating outer/inner radius, pink fill, black ring.
+  ctx.save();
+  ctx.translate(cx, cy);
+  const spikes = 14;
+  ctx.beginPath();
+  for (let i = 0; i < spikes * 2; i++) {
+    const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
+    const r = i % 2 === 0 ? R : R * 0.78;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#FF2E88';
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, R * 0.06);
+  ctx.strokeStyle = '#12061F';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.62, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFF3D6';
+  ctx.fill();
+  ctx.fillStyle = '#12061F';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lines = text.split('\n');
+  const px = R * 0.21;
+  ctx.font = `800 ${px}px ${FONT_LABEL}`;
+  lines.forEach((ln, i) => ctx.fillText(ln, 0, (i - (lines.length - 1) / 2) * px * 1.15));
+  ctx.restore();
+}
 
-export function renderCover(ctx, W, H, state, images, opts = {}) {
-  const showSelection = !!opts.showSelection;
-  const selected = opts.selected ?? -1;
+function drawGoldSeal(ctx, cx, cy, R, lines) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fillStyle = '#F5B81D';
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, R * 0.07);
+  ctx.strokeStyle = '#7A5200';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 0.82, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(122, 82, 0, 0.7)';
+  ctx.lineWidth = Math.max(1, R * 0.03);
+  ctx.stroke();
+  ctx.fillStyle = '#3A2500';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const px = R * 0.24;
+  ctx.font = `800 ${px}px ${FONT_LABEL}`;
+  lines.forEach((ln, i) => ctx.fillText(ln, cx, cy + (i - (lines.length - 1) / 2) * px * 1.2));
+  ctx.restore();
+}
+
+function drawPalmBand(ctx, W, H, bandY, bandH, gradeId) {
+  // Sunset gradient + palm silhouettes along the bottom band.
+  const g = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
+  if (gradeId === 'neon' || gradeId === 'poster-ink') {
+    g.addColorStop(0, '#2B0A4D'); g.addColorStop(0.55, '#7A1E6B'); g.addColorStop(1, '#FF2E88');
+  } else if (gradeId === 'teal') {
+    g.addColorStop(0, '#062A2E'); g.addColorStop(0.55, '#0E6B6B'); g.addColorStop(1, '#FF9E3D');
+  } else {
+    g.addColorStop(0, '#FF7B2F'); g.addColorStop(0.55, '#FF5E7A'); g.addColorStop(1, '#7A1E6B');
+  }
+  ctx.save();
+  ctx.fillStyle = g;
+  ctx.fillRect(0, bandY, W, bandH);
+  // Palm fronds: simple silhouettes that stay INSIDE the band, never
+  // reaching the panels or role labels above it.
+  ctx.fillStyle = 'rgba(16, 4, 26, 0.9)';
+  const palms = [0.06, 0.22, 0.47, 0.68, 0.86, 0.97];
+  for (const fx of palms) {
+    const px = fx * W, py = bandY + bandH * 0.55;
+    const S = bandH * 0.85;
+    ctx.save();
+    ctx.translate(px, py);
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (i - 2.5) * 0.42;
+      ctx.save();
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.ellipse(S * 0.42, 0, S * 0.42, S * 0.07, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillRect(-S * 0.02, 0, S * 0.04, bandH * 0.45);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawBarcode(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
+  ctx.fillStyle = '#111111';
+  let xx = x;
+  let seed = 7;
+  while (xx < x + w) {
+    seed = (seed * 37 + 11) % 97;
+    const bw = 1 + (seed % 4) * (w / 260);
+    if (seed % 3 !== 0) ctx.fillRect(xx, y, bw, h);
+    xx += bw + (w / 260);
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- render
+
+export async function renderCover(ctx, state, W, H, images, opts) {
+  // images: Map scenePath -> HTMLImageElement (already loaded). opts:
+  // { forExport: true } hides the editor selection outline (never drawn
+  // here anyway) and forces the full furniture set.
+  const o = opts || {};
+  const layout = LAYOUTS[state.layout] || LAYOUTS['hero-mosaic'];
+  const look = state.look || { paint: 0.5, gradeAmt: 1, halftone: 0.35, grain: 0.3, glow: 0.3 };
+  const gradeId = state.grade || 'sunset';
+  const showFurniture = state.furniture !== false;
+
+  ctx.save();
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#1A0B2E';
+  ctx.fillStyle = '#12061F';
   ctx.fillRect(0, 0, W, H);
 
-  const quoteH = Math.round(H * 0.055);
-  const bottomH = Math.round(H * 0.085);
-  const panelTop = quoteH;
-  const panelH = H - quoteH - bottomH;
-  const panelArea = { x: 0, y: panelTop, w: W, h: panelH };
+  const topBandH = QB * H;
+  const botBandY = H - BB * H;
 
-  const layout = panelRects(state.layout, state.panels.length);
-  const rects = layout.rects.map((r) => ({
-    x: panelArea.x + r.x * panelArea.w,
-    y: panelArea.y + r.y * panelArea.h,
-    w: r.w * panelArea.w,
-    h: r.h * panelArea.h,
-  }));
+  // --- panels
+  const rects = layout.rects(W, H);
+  const heroIdx = layout.hero >= 0 ? layout.hero : 0;
+  const titleY = layout.titleY(H);
+  const panels = state.panels || [];
+  const drawn = [];
+  for (let i = 0; i < rects.length; i++) {
+    const panel = panels[i % panels.length];
+    const img = images.get(panel.scene) || images.get(CAST[0].scene);
+    if (!img) continue;
+    const rect = rects[i];
+    const isHero = i === heroIdx;
+    // Pop-Out: the hero photo is drawn larger than its panel, breaking the
+    // top and right borders and overlapping the title band. Its role label
+    // is sized from the ORIGINAL frame, never the popped rect.
+    if (layout.popOut && isHero) {
+      const popRect = {
+        x: rect.x - W * 0.015, y: rect.y - H * 0.012,
+        w: rect.w * 1.05, h: rect.h * 1.05, tilt: 0,
+      };
+      const popImg = images.get(HERO_POP_SCENE) || img;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = H * 0.02;
+      ctx.shadowOffsetY = H * 0.006;
+      drawPanel(ctx, popImg, panel, popRect, gradeId, look, o);
+      ctx.restore();
+      // The panel frame is drawn only where the photo does not break it:
+      // a thin dark line along the bottom and left edges.
+      ctx.save();
+      ctx.strokeStyle = 'rgba(10,4,18,0.9)';
+      ctx.lineWidth = Math.max(2, W * 0.004);
+      ctx.beginPath();
+      ctx.moveTo(popRect.x, popRect.y + popRect.h);
+      ctx.lineTo(popRect.x + popRect.w, popRect.y + popRect.h);
+      ctx.moveTo(popRect.x, popRect.y);
+      ctx.lineTo(popRect.x, popRect.y + popRect.h);
+      ctx.stroke();
+      ctx.restore();
+      drawn.push({ panel, rect: popRect, labelRect: rect, pop: true });
+      continue;
+    }
+    drawPanel(ctx, img, panel, rect, gradeId, look, o);
+    // Labels use the layout rect (upright), never the drawn rect: a slanted
+    // panel's drawn rect is in rotated local coordinates.
+    drawn.push({ panel, rect, labelRect: rect, pop: false });
+  }
+  // Role labels after all panels, so a slanted panel's label stays upright.
+  // Skip any label whose box crosses the title + script band, so no fragment
+  // peeks out from behind the title or its scrim.
+  const titlePxEst = fitText(ctx, (state.title || 'VICE ROYALE').toUpperCase(), W * 0.92, Math.round(H * 0.185), (s) => `900 ${s}px ${FONT_TITLE}`, Math.round(H * 0.05));
+  const scriptPxEst = Math.max(14, Math.round(H * 0.058));
+  const titleZone = { y0: titleY - titlePxEst * 0.82, y1: titleY + scriptPxEst * 1.35 };
+  for (const d of drawn) drawRoleLabel(ctx, d.panel, d.labelRect, [titleZone], H);
 
-  // Panels.
-  rects.forEach((rect, i) => {
-    const panel = state.panels[i % state.panels.length];
-    const img = images[panel.scene];
-    if (!img) return;
-    drawPanelImage(ctx, img, rect, panel, state.grade, state.look);
-    // Thin dark gutters between panels.
-    ctx.strokeStyle = 'rgba(10,4,18,0.9)';
-    ctx.lineWidth = Math.max(2, H * 0.004);
-    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
-  });
-
-  // Title placement: over the panels, lower third of the panel area — but
-  // for 3-row layouts the title sits higher (0.36) so it clears the middle
-  // row's role labels instead of covering them.
-  const titleMaxW = W * 0.92;
-  const threeRow = state.layout === 'seven-mosaic' || state.layout === 'nine-grid';
-  const titleTop = panelTop + panelH * (layout.band ? 0.02 : threeRow ? 0.36 : 0.52);
-  const title = drawStripedTitle(ctx, state.title, W / 2, titleTop, titleMaxW, state.grade, H);
-  const titleBottom = titleTop + title.height;
-
-  // Script on a dark scrim, overlapping the title's bottom.
-  const scriptSize = Math.round(H * 0.058);
-  ctx.font = `${scriptSize}px "Yellowtail", cursive`;
-  const scriptW = ctx.measureText(state.script).width;
-  const scrimY = titleBottom - scriptSize * 0.35;
-  ctx.fillStyle = 'rgba(10,4,18,0.55)';
-  ctx.fillRect(W / 2 - scriptW / 2 - H * 0.02, scrimY, scriptW + H * 0.04, scriptSize * 1.35);
-  ctx.fillStyle = '#FF2E88';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(state.script, W / 2, scrimY + scriptSize * 1.02);
-
-  // Role labels (skipped where they would collide with the title band).
-  if (state.furniture !== false) {
-    rects.forEach((rect, i) => {
-      const panel = state.panels[i % state.panels.length];
-      drawRoleLabel(ctx, panel, rect, titleTop, titleBottom, H);
-    });
+  // --- grain over the whole art area
+  if (look.grain > 0.02) {
+    const noise = noiseCanvas(128, 0.5);
+    const pat = ctx.createPattern(noise, 'repeat');
+    ctx.save();
+    ctx.globalAlpha = 0.16 * look.grain;
+    ctx.fillStyle = pat;
+    ctx.fillRect(0, topBandH, W, botBandY - topBandH);
+    ctx.restore();
   }
 
-  // Top quote band.
-  ctx.fillStyle = '#12081F';
-  ctx.fillRect(0, 0, W, quoteH);
-  const qSize = Math.round(quoteH * 0.42);
-  const stars = '★★★★★';
-  ctx.font = `800 ${qSize}px "Barlow Condensed", sans-serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#FFD23F';
-  const starW = ctx.measureText(stars).width;
-  ctx.fillText(stars, W * 0.02, quoteH / 2 + 1);
-  // Quote shrunk to fit the space left of the VOL. pill.
-  const volW = state.furniture !== false ? Math.round(W * 0.075) : 0;
+  // --- top quote band
+  ctx.save();
+  ctx.fillStyle = '#12061F';
+  ctx.fillRect(0, 0, W, topBandH);
+  const qPx = Math.max(11, Math.round(topBandH * 0.52));
+  ctx.font = `800 ${qPx}px ${FONT_LABEL}`;
+  const starW = ctx.measureText('★★★★★  ').width;
   const quoteText = `"${state.quote}" — ${state.quoteSource}`;
-  let qs = qSize;
-  ctx.font = `800 ${qs}px "Barlow Condensed", sans-serif`;
-  const quoteMax = W - W * 0.02 - starW - W * 0.015 - volW - W * 0.03;
-  while (qs > 10 && ctx.measureText(quoteText).width > quoteMax) {
-    qs -= 1;
-    ctx.font = `800 ${qs}px "Barlow Condensed", sans-serif`;
-  }
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(quoteText, W * 0.02 + starW + W * 0.015, quoteH / 2 + 1, quoteMax);
-  // VOL. pill top-right, right-aligned inside the band.
-  if (state.furniture !== false) {
-    const pillH = quoteH * 0.64;
-    ctx.font = `800 ${Math.round(pillH * 0.52)}px "Barlow Condensed", sans-serif`;
-    const pillW = ctx.measureText('VOL. 06').width + pillH * 1.1;
-    drawPill(ctx, 'VOL. 06', W - pillW - W * 0.015, quoteH * 0.18, pillH, '#FFD23F', '#5A2A00');
-  }
-
-  // Bottom band: palms + COMING SOON + billing + barcode + seal.
-  const by = H - bottomH;
-  drawPalmBand(ctx, 0, by, W, bottomH);
-  // Darken the band a touch so the billing reads.
-  ctx.fillStyle = 'rgba(10,4,18,0.25)';
-  ctx.fillRect(0, by, W, bottomH);
-  const csSize = Math.round(bottomH * 0.34);
-  ctx.font = `${csSize}px "Anton", sans-serif`;
+  const qMax = W * 0.78;
+  const qSize = fitText(ctx, quoteText, qMax, qPx, (s) => `800 ${s}px ${FONT_LABEL}`, 10);
+  ctx.fillStyle = '#FFD23F';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('COMING SOON', W * 0.02, by + bottomH * 0.32);
-  ctx.font = `700 ${Math.round(bottomH * 0.20)}px "Barlow Condensed", sans-serif`;
-  ctx.fillStyle = '#FFE9C9';
-  ctx.textAlign = 'center';
-  ctx.fillText(state.billing, W / 2, by + bottomH * 0.38);
-  ctx.fillText(state.billing2, W / 2, by + bottomH * 0.68);
-  ctx.font = `800 ${Math.round(bottomH * 0.22)}px "Barlow Condensed", sans-serif`;
-  ctx.textAlign = 'center';
+  ctx.font = `800 ${qSize}px ${FONT_LABEL}`;
+  ctx.fillText('★★★★★', W * 0.02, topBandH / 2);
+  ctx.fillStyle = '#FFF7E8';
+  ctx.fillText(quoteText, W * 0.02 + starW, topBandH / 2);
+  ctx.restore();
+
+  // --- title + script (drawn over the art, GTA style)
+  const titleInfo = drawTitle(ctx, state, W, H, titleY);
+  const scriptPx = Math.max(14, Math.round(H * 0.058));
+  ctx.save();
+  ctx.font = `${scriptPx}px ${FONT_SCRIPT}`;
+  const sw = ctx.measureText(state.script).width;
+  const sx = (W - sw) / 2;
+  const sy = titleY + scriptPx * 0.95;
+  ctx.fillStyle = 'rgba(10, 4, 18, 0.55)';
+  ctx.fillRect(sx - scriptPx * 0.5, sy - scriptPx * 1.05, sw + scriptPx, scriptPx * 1.35);
+  ctx.fillStyle = '#FF4D9D';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(state.script, sx, sy);
+  ctx.restore();
+
+  if (!showFurniture) { ctx.restore(); return { title: titleInfo }; }
+
+  // --- furniture: pills, ribbon, seals
+  const pillH = Math.max(18, Math.round(H * 0.032));
+  const pillPx = Math.max(11, Math.round(pillH * 0.55));
+  // VOL pill, top-right inside the quote band.
+  ctx.save();
+  ctx.font = `800 ${Math.round(pillH * 0.38)}px ${FONT_LABEL}`;
+  const volText = 'VOL. 06';
+  const volW = ctx.measureText(volText).width + pillH * 0.64 * 1.1;
+  roundRect(ctx, W - W * 0.02 - volW, topBandH * 0.18, volW, pillH * 0.64, pillH * 0.32);
   ctx.fillStyle = '#FFD23F';
-  ctx.fillText(state.tagline, W / 2, by + bottomH * 0.16);
-  drawBarcode(ctx, W * 0.90, by + bottomH * 0.22, W * 0.07, bottomH * 0.5);
-  if (state.furniture !== false) {
-    drawSeal(ctx, W * 0.815, by + bottomH * 0.5, bottomH * 0.42, 'ORIGINAL COVER ART');
-  }
+  ctx.fill();
+  ctx.fillStyle = '#12061F';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(volText, W - W * 0.02 - volW / 2, topBandH * 0.18 + pillH * 0.32 + 1);
+  ctx.restore();
+  // WANTED pill, top-right over the art.
+  const wanted = 'WANTED ★★★★★';
+  ctx.save();
+  ctx.font = `800 ${pillPx}px ${FONT_LABEL}`;
+  const wantedW = ctx.measureText(wanted).width + pillH * 1.1;
+  roundRect(ctx, W - wantedW - W * 0.015, topBandH + H * 0.012, wantedW, pillH, pillH / 2);
+  ctx.fillStyle = '#1B0B2E';
+  ctx.fill();
+  ctx.strokeStyle = '#FFD23F';
+  ctx.lineWidth = Math.max(1.5, pillH * 0.06);
+  ctx.stroke();
+  ctx.fillStyle = '#FFD23F';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(wanted, W - wantedW - W * 0.015 + wantedW / 2, topBandH + H * 0.012 + pillH / 2 + pillPx * 0.04);
+  ctx.restore();
+  // COLLECTOR'S EDITION ribbon, top-left over the art.
+  ctx.save();
+  ctx.translate(W * 0.02, topBandH + H * 0.02);
+  ctx.rotate(-0.06);
+  ctx.fillStyle = '#FF2E88';
+  const ribH = pillH * 0.9;
+  ctx.font = `800 ${Math.round(ribH * 0.5)}px ${FONT_LABEL}`;
+  const ribText = "COLLECTOR'S EDITION";
+  const ribW = ctx.measureText(ribText).width + ribH * 1.2;
+  ctx.fillRect(0, 0, ribW, ribH);
+  ctx.beginPath();
+  ctx.moveTo(ribW, 0); ctx.lineTo(ribW + ribH * 0.5, ribH / 2); ctx.lineTo(ribW, ribH);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#FFF7E8';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(ribText, ribH * 0.6, ribH / 2 + 1);
+  ctx.restore();
+  // HEAT pill under the ribbon.
+  pill(ctx, 'HEAT ★★★★★', W * 0.02, topBandH + H * 0.02 + pillH, pillH * 0.85, '#FFF7E8', '#FF2E88', Math.round(pillH * 0.5));
+  // Gold EST. 2026 seal, top-right corner over the art (below WANTED).
+  drawGoldSeal(ctx, W - W * 0.055, topBandH + H * 0.10 + pillH, H * 0.042, ['EST.', '2026']);
+  // Starburst ORIGINAL COVER ART seal, overlapping the panels top-right —
+  // placed on the seam between the hero and the right panels, clear of
+  // every layout's faces and role labels.
+  drawStarburst(ctx, W * 0.70, topBandH + H * 0.11, H * 0.042, 'ORIGINAL\nCOVER ART');
 
-  // Furniture: seal, ribbon, HEAT pill.
-  if (state.furniture !== false) {
-    // Gold EST. 2026 seal, top-right of the panel area, kept inside the canvas.
-    const sealR = Math.min(W, H) * 0.036;
-    drawSeal(ctx, W - sealR - W * 0.015, panelTop + panelH * 0.10, sealR, 'EST. 2026');
-    // COLLECTOR'S EDITION ribbon, top-left diagonal.
+  // --- bottom band: palm gradient, COMING SOON, billing, seal, barcode
+  drawPalmBand(ctx, W, H, botBandY, BB * H, gradeId);
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  const tagPx = Math.max(12, Math.round(BB * H * 0.32));
+  ctx.font = `800 ${tagPx}px ${FONT_LABEL}`;
+  ctx.fillStyle = '#FFF7E8';
+  ctx.textAlign = 'left';
+  ctx.fillText('COMING SOON', W * 0.02, botBandY + BB * H * 0.38);
+  ctx.fillStyle = '#FFE9A8';
+  ctx.font = `800 ${Math.round(tagPx * 0.95)}px ${FONT_LABEL}`;
+  ctx.textAlign = 'center';
+  ctx.fillText(state.tagline, W * 0.5, botBandY + BB * H * 0.30);
+  // Billing lists the cast roles, fitted so it never reaches the seal or
+  // barcode on the right.
+  const castNames = (state.panels || []).slice(0, 5).map((p) => p.role).join(' · ');
+  const billing = `A VICE ROYALE PICTURE · STARRING ${castNames}`;
+  const billing2 = 'MADE FROM YOUR OWN PHOTOS · GRADED BY HAND';
+  const bPx = fitText(ctx, billing, W * 0.70, Math.max(9, Math.round(BB * H * 0.22)), (s) => `600 ${s}px ${FONT_LABEL}`, 8);
+  ctx.font = `600 ${bPx}px ${FONT_LABEL}`;
+  ctx.fillStyle = '#FFE9A8';
+  ctx.fillText(billing, W * 0.5, botBandY + BB * H * 0.62);
+  ctx.fillStyle = 'rgba(255, 233, 168, 0.8)';
+  ctx.fillText(billing2, W * 0.5, botBandY + BB * H * 0.85);
+  ctx.restore();
+  drawGoldSeal(ctx, W * 0.86, botBandY + BB * H * 0.5, H * 0.024, ['ORIGINAL', 'COVER ART']);
+  drawBarcode(ctx, W * 0.93, botBandY + BB * H * 0.22, W * 0.05, BB * H * 0.56);
+
+  // --- thin gold frame around the whole cover
+  if (state.goldFrame !== false) {
     ctx.save();
-    ctx.translate(W * 0.02, panelTop + panelH * 0.06);
-    ctx.rotate(-0.06);
-    ctx.fillStyle = '#C724B1';
-    ctx.fillRect(0, 0, W * 0.16, H * 0.028);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = `800 ${Math.round(H * 0.016)}px "Barlow Condensed", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText("COLLECTOR'S EDITION", W * 0.08, H * 0.014);
-    ctx.restore();
-    // HEAT pill, top-left below the ribbon — the bottom corners hold the
-    // role labels, so the pill lives at the top where nothing else sits.
-    drawPill(ctx, 'HEAT ★★★★★', W * 0.02, panelTop + panelH * 0.10, H * 0.032, '#FF2E88', '#FFFFFF');
-  }
-
-  // Editor selection outline: ONLY in the interactive editor, never in an
-  // export or a screenshot. The caller passes showSelection only for the
-  // live preview canvas.
-  if (showSelection && selected >= 0 && rects[selected]) {
-    const r = rects[selected];
-    ctx.save();
-    ctx.strokeStyle = '#FF2E88';
-    ctx.lineWidth = Math.max(3, H * 0.006);
-    ctx.setLineDash([12, 8]);
-    ctx.strokeRect(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
+    ctx.strokeStyle = '#F5B81D';
+    ctx.lineWidth = Math.max(2, W * 0.003);
+    ctx.strokeRect(W * 0.004, topBandH * 0.12, W * 0.992, H * 0.996 - topBandH * 0.12);
     ctx.restore();
   }
-  return { rects, hero: layout.hero, titleTop, titleBottom, panelArea };
-}
 
-// Load the scene images (and any uploaded photos) into Image objects.
-export function loadImages(sources) {
-  const out = {};
-  const jobs = Object.entries(sources).map(([key, src]) => new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => { out[key] = img; resolve(); };
-    img.onerror = () => resolve();
-    img.src = src;
-  }));
-  return Promise.all(jobs).then(() => out);
-}
-
-export function scenePath(scene) {
-  return `./scenes/${scene}.jpg`;
+  ctx.restore();
+  return { title: titleInfo };
 }
