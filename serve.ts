@@ -1,10 +1,10 @@
-// serve.ts — a tiny static server for app/ (Node 22, standard library).
-// Lets the entry be tried locally without a build step:
+// serve.ts — a tiny static server for app/ (Node 22, standard library only),
+// so the cover maker can be tried locally without a build step:
 //   node serve.ts            serves app/ on http://localhost:8080
 //   node serve.ts --port 9000
-// It sends the MIME types an offline web app needs and refuses any path
-// outside app/. A development convenience, not a web server.
-
+// It sends the MIME types an offline web app needs, refuses any path outside
+// app/, and otherwise does nothing clever: a development convenience, not a
+// web server for the internet.
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -33,6 +33,8 @@ const MIME: Record<string, string> = {
   '.woff': 'font/woff',
   '.ttf': 'font/ttf',
   '.otf': 'font/otf',
+  '.bin': 'application/octet-stream',
+  '.wasm': 'application/wasm',
   '.txt': 'text/plain; charset=utf-8',
 };
 
@@ -63,13 +65,14 @@ createServer((request, response) => {
   response.writeHead(200, {
     'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
     'content-length': size,
+    'cache-control': 'no-store',
   });
   createReadStream(file).pipe(response);
-}).listen(port, () => {
-  console.log(`Vice Cover Studio at http://localhost:${port}/`);
-  console.log('Shots:');
-  console.log(`  cover (landscape)  http://localhost:${port}/?shot=cover&photo=samples/boulevard.jpg&caption=VICE%20ROYALE&layout=nine&grade=sunset&size=wide`);
-  console.log(`  editor             http://localhost:${port}/?shot=editor&photo=samples/pier.jpg&caption=VICE%20ROYALE&layout=nine&grade=sunset&size=wide`);
-  console.log(`  cover (square)     http://localhost:${port}/?shot=cover&photo=samples/pier.jpg&caption=PALM%20ROYALE&layout=band&grade=golden&size=square`);
-  console.log(`  cover (portrait)   http://localhost:${port}/?shot=cover&photo=samples/boulevard.jpg&caption=MIDNIGHT%20VICE&layout=full&grade=ink&size=story`);
+}).listen(port, '127.0.0.1', () => {
+  console.log(`Vice Cover Studio is on http://localhost:${port}`);
+  console.log('Try the shots:');
+  console.log(`  hero cover (wide)   http://localhost:${port}/?shot=cover&layout=hero-mosaic&grade=sunset&title=VICE%20ROYALE&script=chasing%20the%20last%20light&w=1920&h=1080`);
+  console.log(`  editor              http://localhost:${port}/?shot=editor&layout=hero-mosaic&grade=sunset`);
+  console.log(`  hero cover (square) http://localhost:${port}/?shot=cover&layout=hero-three&grade=golden&title=PALM%20ROYALE&script=run%20the%20night&w=1080&h=1080`);
+  console.log(`  poster ink (tall)   http://localhost:${port}/?shot=cover&layout=seven-mosaic&grade=ink&title=MIDNIGHT%20VICE&script=after%20dark%2C%20everything%27s%20for%20sale&w=1024&h=1280`);
 });

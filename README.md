@@ -8,15 +8,17 @@ A web app that turns a photo and a caption into GTA-style multi-panel cover art,
 
 ## What it does
 
-Load a photo (or several), pick a layout and a colour grade, write a title and a script subtitle, and export the cover as a PNG in 1920×1080, 1080×1080 or 1080×1350. Everything runs offline in the browser — photos never leave the machine.
+Load a photo (or several), pick a hero layout and a colour grade, write a title and a script line, and export the cover as a PNG in 1920×1080, 1080×1080 or 1080×1350. Everything runs offline in the browser — photos never leave the machine.
 
-- **5 layouts** — Nine Grid (3×3, nine distinct scenes), Title Band (panels up top, title in a clean band below), Dense Grid (tall hero + 2×3 captioned grid), Hero + Strip, and Full Grid (hero on top, four-panel strip below).
-- **4 grades** — Sunset, Neon Night, Golden Hour, and Poster Ink (posterised halftone duotone — the illustrated look).
-- **3D title** — a layered deep-purple extrusion behind a cream-to-orange-to-pink gradient fill with a thick black outline, sized to fill ~90% of the cover. Passion One Black, OFL.
-- **Pink script** — Yellowtail brush script in hot pink, in its own clear band so it never collides with the title.
-- **Poster furniture** — gold EST. 2026 seal, VOL. 06 pill, COLLECTOR'S EDITION ribbon, HEAT ★★★★★ pill, a five-star press quote, palm-silhouette bottom band with a tagline, credits and a barcode. Toggleable, on by default.
-- **Per-panel controls** — click a panel to select it, drag to reposition the photo, zoom, swap its source, and edit its place and time-tagline caption.
-- **9 bundled scenes** — original model-made photographs (sports car, neon street, speedboat, skyline, helicopter, motorbike, marina) plus the kit's two sample photos, so the nine-panel grid never repeats a photo.
+- **Hero-centric layouts (6)** — Hero Mosaic (big hero left, four cast panels right, the default), Hero + Three (big hero on top, three below), Diagonal Trio, Seven Mosaic (hero + six), Nine Grid (3×3) and Title Band. Every hero layout puts one big face at the centre of the poster, with the cast around it.
+- **A cast, not places** — nine original model-made portraits, each with a role: THE FIXER, THE GETAWAY, THE CREW, THE ANGLER, THE TOURIST, THE LOOKOUT, THE MECHANIC, THE INSIDER and THE COURIER, plus two place scenes (the coast, neon row) and the kit's two sample photos.
+- **Striped 3D title** — horizontal retro stripes (gold→brown, yellow→pink, blue→purple by grade) with a layered deep-purple extrusion and a thick black outline, sized to fill ~90% of the cover. Passion One Black, OFL.
+- **Top quote band** — five gold stars, an invented press quote and its source, plus a VOL. 06 pill.
+- **Pink script** — Yellowtail brush script in hot pink, in its own clear band over a dark scrim, overlapping the title's bottom.
+- **Coming Soon + billing** — the bottom band has COMING SOON, a centred billing block, a barcode and a gold ORIGINAL COVER ART seal, over palm silhouettes on a sunset gradient.
+- **6 grades + LOOK sliders** — Sunset, Neon Night, Golden Hour, Poster Ink (posterise + halftone + duotone), Tropic Teal and Heatwave, with Paint, Grade, Halftone, Grain and Glow sliders.
+- **Any photo** — multi-photo upload (local only), per-panel click-select, drag to reposition, zoom, Face-aware crop, Reset / Flip / Swap, Auto layout, Surprise me, Undo / Redo, and a 3-step flow (Add photos → Caption → Export PNG) with Export all three sizes.
+- **Poster furniture** — gold EST. 2026 seal, VOL. pill, COLLECTOR'S EDITION ribbon, HEAT ★★★★★ pill, quote, palm band, credits and barcode. Toggleable, on by default.
 
 ## Run it
 

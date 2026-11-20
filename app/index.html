@@ -3,77 +3,96 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Cover Studio — GTA-style cover art maker</title>
-<link rel="icon" href="data:,">
+<title>Vice Cover Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23FF2E88'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">VICE COVER STUDIO</div>
-  <div class="tag">turn a photo into cover art — offline, on your machine</div>
-</header>
 <main class="app">
+  <header class="topbar">
+    <div>
+      <h1>Vice Cover Studio</h1>
+      <p class="sub">Your photo, your cast, your cover — a GTA-style poster in three steps.</p>
+    </div>
+    <nav class="steps" aria-label="Steps">
+      <button type="button" data-step="photos" class="on">1 · Add photos</button>
+      <button type="button" data-step="caption">2 · Caption</button>
+      <button type="button" data-step="export">3 · Export PNG</button>
+    </nav>
+  </header>
+
   <section class="stage">
-    <canvas id="preview" width="1920" height="1080" aria-label="Cover preview"></canvas>
-    <p class="hint" id="panelHint">Click a panel to select it, then drag it to reposition the photo.</p>
+    <canvas id="preview" width="1920" height="1080" aria-label="The cover preview"></canvas>
+    <p id="status" role="status">Loading the cast…</p>
   </section>
+
   <aside class="controls">
-    <h1>Make your cover</h1>
-    <p class="steps">Photo → layout → caption → export. Four steps, no upload.</p>
+    <section class="step-panel on" data-panel="photos">
+      <h2>1 · Add photos</h2>
+      <p>Photos stay on your machine — nothing is uploaded.</p>
+      <label class="file">Add your photos <input id="photo" type="file" accept="image/*" multiple></label>
+      <div class="row">
+        <button id="auto-layout" type="button">Auto layout</button>
+        <button id="surprise" type="button">Surprise me</button>
+        <button id="undo" type="button" disabled>Undo</button>
+        <button id="redo" type="button" disabled>Redo</button>
+      </div>
+      <h3>Layout</h3>
+      <div id="layouts" class="chips"></div>
+      <h3>Grade</h3>
+      <div id="grades" class="chips"></div>
+      <h3>Look</h3>
+      <label>Paint <input id="look-paint" type="range" min="0" max="100" value="50"></label>
+      <label>Grade <input id="look-grade" type="range" min="0" max="100" value="50"></label>
+      <label>Halftone <input id="look-halftone" type="range" min="0" max="100" value="0"></label>
+      <label>Grain <input id="look-grain" type="range" min="0" max="100" value="30"></label>
+      <label>Glow <input id="look-glow" type="range" min="0" max="100" value="40"></label>
+      <h3>Panels — click a panel on the cover to pick it</h3>
+      <div id="panels" class="chips"></div>
+      <div class="panel-form">
+        <label>Scene
+          <select id="panel-scene"></select>
+        </label>
+        <label>Role <input id="panel-role" type="text" maxlength="18"></label>
+        <label>Caption <input id="panel-sub" type="text" maxlength="48"></label>
+        <label>Zoom <input id="panel-zoom" type="range" min="100" max="220" value="100"></label>
+        <label>Left–right <input id="panel-fx" type="range" min="0" max="100" value="50"></label>
+        <label>Up–down <input id="panel-fy" type="range" min="0" max="100" value="32"></label>
+        <label class="check"><input id="panel-face" type="checkbox" checked> Face — keep the face in frame</label>
+        <div class="row">
+          <button id="panel-reset" type="button">Reset</button>
+          <button id="panel-flip" type="button">Flip</button>
+          <button id="panel-swap" type="button">Swap with next</button>
+        </div>
+      </div>
+    </section>
 
-    <label class="field">Your photo
-      <input id="photo" type="file" accept="image/*" multiple>
-    </label>
-    <p class="note">Photos stay on your machine. Pick one to fill the hero, or several to fill the panels.</p>
+    <section class="step-panel" data-panel="caption">
+      <h2>2 · Caption</h2>
+      <label>Title <input id="title" type="text" maxlength="24" value="VICE ROYALE"></label>
+      <label>Script line <input id="script" type="text" maxlength="48" value="chasing the last light"></label>
+      <label>Quote <input id="quote" type="text" maxlength="64" value="SUNSET, SMOKE AND STOLEN GOLD"></label>
+      <label>Quote source <input id="quote-source" type="text" maxlength="32" value="THE COAST LEDGER"></label>
+      <label>Tagline <input id="tagline" type="text" maxlength="48" value="EVERY SUNSET HAS A PRICE"></label>
+      <label>Billing, line 1 <input id="billing" type="text" maxlength="64" value="A VICE ROYALE PICTURE · STARRING YOU"></label>
+      <label>Billing, line 2 <input id="billing2" type="text" maxlength="64" value="MADE FROM YOUR OWN PHOTOS · GRADED BY HAND"></label>
+      <label class="check"><input id="furniture" type="checkbox" checked> Poster furniture (seals, ribbon, pills, barcode)</label>
+    </section>
 
-    <fieldset>
-      <legend>Layout</legend>
-      <div class="row" id="layouts"></div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Grade</legend>
-      <div class="row" id="grades"></div>
-    </fieldset>
-
-    <label class="field">Title
-      <input id="title" type="text" maxlength="24" value="VICE ROYALE">
-    </label>
-    <label class="field">Script subtitle
-      <input id="script" type="text" maxlength="48" value="chasing the last light">
-    </label>
-    <label class="field">Press quote
-      <input id="quote" type="text" maxlength="80" value="THE COAST HAS NEVER LOOKED THIS GUILTY.">
-    </label>
-    <label class="field">Bottom tagline
-      <input id="tagline" type="text" maxlength="48" value="EVERY SUNSET HAS A PRICE">
-    </label>
-
-    <label class="check"><input id="furniture" type="checkbox" checked> Poster furniture (seal, pills, quote, palm band)</label>
-
-    <fieldset id="panelBox">
-      <legend>Selected panel</legend>
-      <label class="field">Photo
-        <select id="panelPhoto"></select>
-      </label>
-      <label class="field">Place
-        <input id="panelPlace" type="text" maxlength="24">
-      </label>
-      <label class="field">Time — tagline
-        <input id="panelTag" type="text" maxlength="40">
-      </label>
-      <label class="field">Zoom
-        <input id="panelZoom" type="range" min="1" max="2.5" step="0.05" value="1">
-      </label>
-    </fieldset>
-
-    <fieldset>
-      <legend>Export size</legend>
-      <div class="row" id="sizes"></div>
-    </fieldset>
-    <button id="export" type="button">Export PNG</button>
-    <button id="surprise" type="button" class="ghost">Surprise me</button>
-    <p id="status" role="status"></p>
+    <section class="step-panel" data-panel="export">
+      <h2>3 · Export PNG</h2>
+      <p>One click per size, or all three at once.</p>
+      <fieldset>
+        <legend>Size</legend>
+        <label><input type="radio" name="size" value="1920x1080" checked> 1920 × 1080 — wide</label>
+        <label><input type="radio" name="size" value="1080x1080"> 1080 × 1080 — square</label>
+        <label><input type="radio" name="size" value="1080x1350"> 1080 × 1350 — portrait</label>
+      </fieldset>
+      <div class="row">
+        <button id="export" type="button">Export PNG</button>
+        <button id="export-all" type="button">Export all three</button>
+      </div>
+    </section>
   </aside>
 </main>
 <script type="module" src="./src/main.js"></script>
