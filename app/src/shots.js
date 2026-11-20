@@ -1,58 +1,15 @@
-// Fixed scenes for screenshots: ?shot=cover shows the cover alone at its export size;
-// ?shot=editor shows the editor with a photo loaded. window.__shotReady is set once painted.
+// shots.js — fixed scenes for screenshots.
+// ?shot=cover shows the cover alone, full frame; ?shot=editor shows the
+// editor with a photo loaded. `photo` picks a scene file, `caption` the
+// title. window.__shotReady is set once the cover is painted, so a
+// headless browser knows when to take the screenshot.
 
-/** Applies a shot scene. `api` is the editor's { state, sceneImages, uploads, canvas, setPhoto, redraw, ready }. */
-export async function runShot(shot, query, api) {
-  const { state, sceneImages, uploads, canvas } = api;
-  const photo = query.get('photo') || 'boulevard';
-  const layout = query.get('layout') || 'nine-grid';
-  const grade = query.get('grade') || 'sunset';
-  const size = query.get('size') || '1920x1080';
-  const title = query.get('title') || 'VICE ROYALE';
-  const script = query.get('script') || 'chasing the last light';
-
-  state.layout = layout;
-  state.grade = grade;
-  state.size = size;
-  state.title = title;
-  state.script = script;
-  if (query.get('quote')) state.quote = query.get('quote');
-  if (query.get('band')) state.band = query.get('band');
-  // A fresh panel set for the shot's layout, hero first.
-  const { defaultPanels, layoutPanels, SCENES, dedupePanelSources } = await import('./cover.js');
-  state.panels = defaultPanels(layout);
-
-  // The shot's hero photo: the named scene, loaded as the hero upload, and the hero
-  // panel's caption follows the photo (not the panel slot's old caption).
-  if (sceneImages[photo]) {
-    api.setPhoto(sceneImages[photo]);
-    const [w, h] = size.split('x').map(Number);
-    const heroIdx = layoutPanels(layout, w, h).findIndex((p) => p.hero);
-    const scene = SCENES.find((s) => s.id === photo);
-    if (heroIdx >= 0 && scene) state.panels[heroIdx].caption = scene.caption;
-    // No panel repeats the hero photo while a spare scene is unused: with nine
-    // scenes and nine panels, a repeated source always has an unused spare.
-    state.panels.forEach((p, i) => {
-      if (i !== heroIdx && p.source === photo) {
-        const spare = SCENES.find((s) => s.id !== photo && !state.panels.some((q) => q.source === s.id));
-        if (spare) {
-          p.source = spare.id;
-          p.caption = spare.caption;
-        }
-      }
-    });
-  }
-  // One last pass: no two panels share a scene, so the dense grids never repeat.
-  dedupePanelSources(state.panels);
-
-  if (shot === 'cover') {
-    document.body.classList.add('shot-cover');
-    const [w, h] = size.split('x').map(Number);
-    canvas.width = w;
-    canvas.height = h;
-  }
-  api.redraw();
-  // Two frames so the canvas paint lands before the screenshot.
+export async function runShot(shot, query, load) {
+  if (shot === 'cover') document.body.classList.add('shot-cover');
+  const photo = query.get('photo') || 'samples/pier.jpg';
+  const caption = query.get('caption') || 'VICE ROYALE';
+  await load(photo, caption);
+  // Two frames so the canvas paint and the font swap have settled.
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  api.ready();
+  window.__shotReady = true;
 }

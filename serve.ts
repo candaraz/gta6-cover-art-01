@@ -1,16 +1,16 @@
-// A tiny static server for app/ (Node 22, standard library only), so an entry can be tried
-// locally without a build step: `node serve.ts` serves app/ on http://localhost:8080.
-// It sends the MIME types an offline web app needs, refuses any path outside app/, and otherwise
-// does nothing clever: this is a development convenience, not a web server for the internet.
-// On startup it also prints the four screenshot scenes from shots.json, so a visual
-// check is one copy-paste away.
-import { createReadStream, readFileSync, statSync } from 'node:fs';
+// serve.ts — a tiny static server for app/ (Node 22, standard library).
+// Lets the entry be tried locally without a build step:
+//   node serve.ts            serves app/ on http://localhost:8080
+//   node serve.ts --port 9000
+// It sends the MIME types an offline web app needs and refuses any path
+// outside app/. A development convenience, not a web server.
+
+import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('./app', import.meta.url)));
-const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const args = process.argv.slice(2);
 const portIndex = args.indexOf('--port');
 const requested = portIndex === -1 ? 8080 : Number(args[portIndex + 1]);
@@ -33,11 +33,6 @@ const MIME: Record<string, string> = {
   '.woff': 'font/woff',
   '.ttf': 'font/ttf',
   '.otf': 'font/otf',
-  '.bin': 'application/octet-stream',
-  '.wasm': 'application/wasm',
-  '.wav': 'audio/wav',
-  '.mp3': 'audio/mpeg',
-  '.ogg': 'audio/ogg',
   '.txt': 'text/plain; charset=utf-8',
 };
 
@@ -68,17 +63,13 @@ createServer((request, response) => {
   response.writeHead(200, {
     'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
     'content-length': size,
-    'cache-control': 'no-store',
   });
   createReadStream(file).pipe(response);
-}).listen(port, '127.0.0.1', () => {
-  console.log(`app/ is on http://localhost:${port}`);
-  try {
-    const shots = JSON.parse(readFileSync(join(here, 'shots.json'), 'utf-8'));
-    for (const shot of shots) {
-      console.log(`shot ${shot.name}: http://localhost:${port}/${shot.query}`);
-    }
-  } catch {
-    // No shots.json beside serve.ts: the server still works.
-  }
+}).listen(port, () => {
+  console.log(`Vice Cover Studio at http://localhost:${port}/`);
+  console.log('Shots:');
+  console.log(`  cover (landscape)  http://localhost:${port}/?shot=cover&photo=samples/boulevard.jpg&caption=VICE%20ROYALE&layout=nine&grade=sunset&size=wide`);
+  console.log(`  editor             http://localhost:${port}/?shot=editor&photo=samples/pier.jpg&caption=VICE%20ROYALE&layout=nine&grade=sunset&size=wide`);
+  console.log(`  cover (square)     http://localhost:${port}/?shot=cover&photo=samples/pier.jpg&caption=PALM%20ROYALE&layout=band&grade=golden&size=square`);
+  console.log(`  cover (portrait)   http://localhost:${port}/?shot=cover&photo=samples/boulevard.jpg&caption=MIDNIGHT%20VICE&layout=full&grade=ink&size=story`);
 });

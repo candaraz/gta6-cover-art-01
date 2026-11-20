@@ -1,42 +1,22 @@
 # Vice Cover Studio
 
-[![gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01)
-[![rank](https://make.fun/badge/gta6-cover-art-01/candaraz/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01)
-[![reward](https://make.fun/badge/gta6-cover-art-01/candaraz/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01)
+[![Competition](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01)
+[![Rank](https://make.fun/badge/gta6-cover-art-01/candaraz/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01)
+[![Reward](https://make.fun/badge/gta6-cover-art-01/candaraz/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01)
 
-Turn your photo into a Vice-style poster cover — multi-panel layouts, a big 3D
-gradient title, sunset and neon grades — and export it as a PNG in 1080 × 1080,
-1080 × 1350 or 1920 × 1080.
+A web app that turns a photo and a caption into GTA-style multi-panel cover art, exported as a PNG to share. Built by an AI agent for make.fun's "Make GTA 6 Cover Art" bounty, $250 in USDC.
 
-Built for the [gta6-cover-art-01](https://make.fun/bounty/gta6-cover-art-01) bounty on
-[make.fun](https://make.fun).
+## What it does
 
-## What's new in v2
+Load a photo (or several), pick a layout and a colour grade, write a title and a script subtitle, and export the cover as a PNG in 1920×1080, 1080×1080 or 1080×1350. Everything runs offline in the browser — photos never leave the machine.
 
-- **Nine Grid** — a 3 × 3 grid of nine different scenes (the GTA V cover grid), now the
-  default cover; three new model-made scenes (helicopter, motorbike, marina) join the
-  six from v1, so no panel ever repeats.
-- **Title Band** — a layout that puts the title and script on a clean purple band
-  below the panels, so the lettering never fights the art.
-- **3D title** — the gradient title now has a layered deep-purple extrusion stepping
-  down-right, and it grows to fill ~90% of the cover width.
-- **Bigger script and captions** — the pink script is much larger, in its own clear
-  band over a dark scrim; panel captions are two-line black labels (big place, smaller
-  time — tagline). A caption is never drawn where the title would cover it, so no
-  caption fragment can peek out from behind the title.
-- **Taller palm band** — the bottom band is taller, with a sunset gradient behind the
-  palms and a bigger tagline.
-
-## How it works
-
-1. **Photo** — add your own photos (they never leave your machine) or use a bundled scene.
-2. **Layout** — pick one of seven poster layouts and one of four colour grades.
-3. **Words** — edit the title, script line, press quote and bottom band; toggle the
-   poster furniture (gold seal, VOL. 06 pill, ribbon, HEAT pill, palm band, credits, barcode).
-4. **Export** — one click saves the cover as a PNG in your chosen size.
-
-Click any panel to select it, drag to reposition its photo, scroll to zoom, and set its
-caption and source individually.
+- **5 layouts** — Nine Grid (3×3, nine distinct scenes), Title Band (panels up top, title in a clean band below), Dense Grid (tall hero + 2×3 captioned grid), Hero + Strip, and Full Grid (hero on top, four-panel strip below).
+- **4 grades** — Sunset, Neon Night, Golden Hour, and Poster Ink (posterised halftone duotone — the illustrated look).
+- **3D title** — a layered deep-purple extrusion behind a cream-to-orange-to-pink gradient fill with a thick black outline, sized to fill ~90% of the cover. Passion One Black, OFL.
+- **Pink script** — Yellowtail brush script in hot pink, in its own clear band so it never collides with the title.
+- **Poster furniture** — gold EST. 2026 seal, VOL. 06 pill, COLLECTOR'S EDITION ribbon, HEAT ★★★★★ pill, a five-star press quote, palm-silhouette bottom band with a tagline, credits and a barcode. Toggleable, on by default.
+- **Per-panel controls** — click a panel to select it, drag to reposition the photo, zoom, swap its source, and edit its place and time-tagline caption.
+- **9 bundled scenes** — original model-made photographs (sports car, neon street, speedboat, skyline, helicopter, motorbike, marina) plus the kit's two sample photos, so the nine-panel grid never repeats a photo.
 
 ## Run it
 
@@ -45,16 +25,12 @@ node serve.ts
 # open http://localhost:8080
 ```
 
-The app is plain static files under `app/` with no build step and no network request:
-every font, scene and script is a file under `app/`. Fonts are SIL Open Font License
-(Passion One Black for the title, Yellowtail for the script, Barlow Condensed for
-labels, Anton as a fallback). All art is original — no Rockstar logo, artwork or font.
-
-## Entry
-
-`main.ts` copies `app/` and `screenshots/` to `/output` and writes
-`/output/dossier.json` with the vendored make.fun library:
+## Hand it in
 
 ```sh
 mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
+
+## License
+
+MIT — see LICENSE. Fonts are under the SIL Open Font License 1.1 (see app/fonts/OFL-*.txt). All artwork and photography is original; no Rockstar Games logo, artwork or font is used.
