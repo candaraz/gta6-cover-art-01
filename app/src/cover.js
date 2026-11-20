@@ -236,6 +236,17 @@ export function fitText(ctx, text, maxW, startPx, font, minPx) {
   return px;
 }
 
+// How wide a centred line in the bottom band may be before it touches the
+// gold seal. The seal sits at W*0.86 with radius H*0.024, so a fixed 0.70W
+// cap lets a centred line reach 0.85W — past the seal's left edge in
+// portrait, where the last cast name slid under the seal and was clipped.
+// The safe width is derived from the seal geometry, so it holds at every
+// export size: the line's right edge stops a W*0.02 gap short of the seal.
+export function billingSafeWidth(W, H) {
+  const sealLeft = W * 0.86 - H * 0.024;
+  return Math.max(80, 2 * (sealLeft - W * 0.02 - W * 0.5));
+}
+
 export function coverRect(img, rect, zoom, dx, dy, face) {
   // Cover-fit an image into rect, with zoom/pan and a face bias (faces sit
   // in the upper third, so the face toggle re-centres the crop there).
@@ -876,17 +887,40 @@ export async function renderCover(ctx, state, W, H, images, opts) {
   ctx.font = `800 ${Math.round(tagPx * 0.95)}px ${FONT_LABEL}`;
   ctx.textAlign = 'center';
   ctx.fillText(state.tagline, W * 0.5, botBandY + BB * H * 0.30);
-  // Billing lists the cast roles, fitted so it never reaches the seal or
-  // barcode on the right.
+  // Billing lists the cast roles, fitted to the safe width so it never
+  // reaches the seal or barcode on the right. If even the minimum size
+  // cannot fit the whole cast on one line, the billing wraps to two lines
+  // at a " · " boundary instead of clipping a name.
   const castNames = (state.panels || []).slice(0, 5).map((p) => p.role).join(' · ');
   const billing = `A VICE ROYALE PICTURE · STARRING ${castNames}`;
   const billing2 = 'MADE FROM YOUR OWN PHOTOS · GRADED BY HAND';
-  const bPx = fitText(ctx, billing, W * 0.70, Math.max(9, Math.round(BB * H * 0.22)), (s) => `600 ${s}px ${FONT_LABEL}`, 8);
+  const safeW = billingSafeWidth(W, H);
+  const bPx = fitText(ctx, billing, safeW, Math.max(9, Math.round(BB * H * 0.22)), (s) => `600 ${s}px ${FONT_LABEL}`, 8);
   ctx.font = `600 ${bPx}px ${FONT_LABEL}`;
-  ctx.fillStyle = '#FFE9A8';
-  ctx.fillText(billing, W * 0.5, botBandY + BB * H * 0.62);
-  ctx.fillStyle = 'rgba(255, 233, 168, 0.8)';
-  ctx.fillText(billing2, W * 0.5, botBandY + BB * H * 0.85);
+  if (ctx.measureText(billing).width <= safeW) {
+    ctx.fillStyle = '#FFE9A8';
+    ctx.fillText(billing, W * 0.5, botBandY + BB * H * 0.62);
+    ctx.fillStyle = 'rgba(255, 233, 168, 0.8)';
+    ctx.fillText(billing2, W * 0.5, botBandY + BB * H * 0.85);
+  } else {
+    const parts = billing.split(' · ');
+    let line1 = parts[0];
+    let rest = parts.slice(1);
+    for (let i = 1; i < parts.length; i++) {
+      const joined = `${line1} · ${parts[i]}`;
+      if (ctx.measureText(joined).width <= safeW) { line1 = joined; rest = parts.slice(i + 1); }
+      else break;
+    }
+    const line2 = rest.join(' · ');
+    const bPx2 = fitText(ctx, line2, safeW, bPx, (s) => `600 ${s}px ${FONT_LABEL}`, 8);
+    ctx.font = `600 ${bPx2}px ${FONT_LABEL}`;
+    ctx.fillStyle = '#FFE9A8';
+    ctx.fillText(line1, W * 0.5, botBandY + BB * H * 0.52);
+    ctx.fillText(line2, W * 0.5, botBandY + BB * H * 0.70);
+    ctx.font = `600 ${Math.max(8, Math.round(bPx2 * 0.85))}px ${FONT_LABEL}`;
+    ctx.fillStyle = 'rgba(255, 233, 168, 0.8)';
+    ctx.fillText(billing2, W * 0.5, botBandY + BB * H * 0.88);
+  }
   ctx.restore();
   drawGoldSeal(ctx, W * 0.86, botBandY + BB * H * 0.5, H * 0.024, ['ORIGINAL', 'COVER ART']);
   drawBarcode(ctx, W * 0.93, botBandY + BB * H * 0.22, W * 0.05, BB * H * 0.56);
